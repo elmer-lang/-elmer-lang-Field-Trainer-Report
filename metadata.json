@@ -1,0 +1,5 @@
+{
+  "name": "Field Training Portal",
+  "description": "A Google Apps Script based field training portal with React frontend.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,2259 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Field Training Portal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React 18 UMD -->
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel Standalone -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- PropTypes (Required for Recharts UMD) -->
+    <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
+    
+    <!-- Recharts UMD -->
+    <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #f1f1f1; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+      .animate-fade { animation: fadeIn 0.4s ease-out; }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      .loader { width: 24px; height: 24px; border: 3px solid #FFF; border-bottom-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
+      .loader-primary { border-color: #ea580c; border-bottom-color: transparent; } /* Orange-600 */
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      
+      /* RTL Support */
+      [dir="rtl"] .text-right { text-align: left; }
+      [dir="rtl"] .text-left { text-align: right; }
+      
+      @media print {
+        @page { size: landscape; margin: 0.5cm; }
+        .no-print, button, header, .print\:hidden { display: none !important; }
+        .print-only { display: block !important; }
+        
+        /* Overrides to ensure full content prints */
+        body, #root, main, .overflow-y-auto, .overflow-hidden { 
+          height: auto !important; 
+          overflow: visible !important; 
+          display: block !important;
+        }
+        
+        body { background: white; -webkit-print-color-adjust: exact; }
+        
+        /* Ensure charts print correctly */
+        .recharts-wrapper { width: 100% !important; height: auto !important; }
+        
+        /* Table adjustments for print */
+        table { width: 100% !important; font-size: 10px; }
+        td, th { padding: 4px !important; }
+
+        /* Force Flex for print header */
+        .print\:flex { display: flex !important; }
+      }
+    </style>
+  </head>
+  <body class="bg-zinc-50 text-slate-900 font-sans h-screen flex flex-col overflow-hidden">
+    
+    <div id="root" class="h-full flex flex-col">
+       <div class="flex flex-col items-center justify-center h-full">
+         <div class="loader loader-primary w-10 h-10 mb-4"></div>
+         <p class="text-gray-500 font-medium">Loading Portal...</p>
+         <p class="text-xs text-gray-400 mt-2">Connecting to database...</p>
+       </div>
+    </div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useMemo, useRef, useContext, createContext } = React;
+      
+      // Safe access to Recharts globals (ensures the library loaded correctly)
+      const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis } = window.Recharts || {};
+      const canRenderCharts = !!(BarChart && RadarChart);
+
+      // --- TRANSLATION DICTIONARY ---
+      const translations = {
+        en: {
+          loading: "Loading Portal...",
+          connecting: "Connecting to database...",
+          portalTitle: "Field Training Portal",
+          selectModule: "Select a module to continue",
+          evalPortal: "Evaluation Portal",
+          evalDesc: "Submit 1st & 2nd Half Evaluations",
+          trainerTracker: "Trainer Tracker",
+          trackerDesc: "Personal Dashboard",
+          adminPortal: "Admin Portal",
+          adminDesc: "Full System Overview",
+          welcomeBack: "Welcome Back",
+          restricted: "Restricted Access",
+          idNumber: "ID Number",
+          password: "Password",
+          login: "Login",
+          registerNew: "Register New Account",
+          fullName: "Full Name",
+          position: "Position",
+          branch: "Branch",
+          email: "Email",
+          register: "Register",
+          id4Digits: "ID Number (4 Digits)",
+          regSuccess: "Registration Submitted for Approval. An administrator will review your request.",
+          evalForm: "Evaluation Form",
+          traineeInfo: "Trainee & Trainer Info",
+          traineeID: "Trainee ID",
+          traineeName: "Trainee Name",
+          evalType: "Evaluation Type",
+          trainerName: "Trainer Name",
+          select: "Select...",
+          firstHalf: "1st Half",
+          secondHalf: "2nd Half",
+          teamMember: "Team Member",
+          teamLeader: "Team Leader",
+          excellent: "Excellent",
+          exceeds: "Exceeds Expectations",
+          meets: "Meets Expectations",
+          inconsistent: "Inconsistent",
+          unsatisfactory: "Unsatisfactory",
+          submit: "Submit Evaluation",
+          totalScore: "Total Grand Score",
+          overallRating: "Overall Rating",
+          evalComplete: "Evaluation Complete!",
+          evalSaved: "The evaluation has been saved successfully.",
+          preview: "Preview",
+          download: "Download",
+          openDrive: "Open in Drive",
+          evalAnother: "Evaluate Another",
+          dashboard: "Dashboard",
+          printDash: "Print Dashboard",
+          printTable: "Print Table Only",
+          showing: "Showing",
+          records: "trainees",
+          sn: "SN",
+          grade: "Grade",
+          comments: "Comments",
+          requests: "Requests",
+          pending: "Pending",
+          approved: "Approved",
+          rejected: "Rejected",
+          allow: "Allow",
+          deny: "Deny",
+          trainerOverview: "Trainer Performance Overview",
+          colTotalTM: "Total TM",
+          colTotalEval: "Total Evals",
+          colBranches: "Branches",
+          colMonthlyComp: "Completed (Month)",
+          col1stHalf: "1st Half",
+          colDays: "Active Days",
+          employees: "Employees Evaluated",
+          kpiEmployees: "Total Employees",
+          kpiAvg: "Avg Score",
+          kpiPos: "Member | Leader",
+          kpiHalves: "1st / 2nd Half",
+          gradeDist: "Grade Distribution",
+          catPerf: "Category Performance",
+          quickSelect: "Quick Select (Month / Year)",
+          dateRange: "Date Range",
+          filters: "Filters",
+          all: "All",
+          year: "Year",
+          pendingReg: "Pending Registrations",
+          pendingEdit: "Pending Edit Requests",
+          reasonDel: "Reason for Deletion",
+          submitReq: "Submit Request",
+          reqTitle: "Request Deletion / Edit",
+          reqDesc: "You are requesting to delete this evaluation to re-submit. Admin approval required.",
+          logout: "Logout",
+          viewPdf: "View PDF",
+          loadingData: "Crunching numbers...",
+          noData: "No records found matching filters.",
+          idPlaceholder: "Search...",
+          adminOverview: "Administrator Overview",
+          myTracker: "My Performance Tracker",
+          viewingAdmin: "Viewing data for ALL trainers and trainees across the system.",
+          viewingTrainer: "Viewing data for Trainer: ",
+          countBreakdown: "Count Breakdown",
+          forgotPass: "Forgot Password?",
+          resetPass: "Reset Password",
+          enterId: "Enter ID Number",
+          sendCode: "Send Verification Code",
+          enterCode: "Enter Code",
+          newPass: "New Password",
+          confirmPass: "Confirm Password",
+          changePass: "Change Password",
+          codeSent: "Code sent to your email!",
+          passChanged: "Password changed successfully! Please login.",
+          codeInvalid: "Invalid Code",
+          profilePhoto: "Profile Photo",
+          uploadImage: "Upload Image",
+          openCamera: "Open Camera",
+          takePhoto: "Take Photo",
+          retake: "Retake",
+          closeCamera: "Close Camera",
+          photoRequired: "A profile photo is required."
+        },
+        ar: {
+          loading: "جاري تحميل البوابة...",
+          connecting: "جاري الاتصال بقاعدة البيانات...",
+          portalTitle: "بوابة التدريب الميداني",
+          selectModule: "اختر وحدة للمتابعة",
+          evalPortal: "بوابة التقييم",
+          evalDesc: "تقديم تقييمات النصف الأول والثاني",
+          trainerTracker: "نظام تتبع المدرب",
+          trackerDesc: "لوحة المعلومات الشخصية",
+          adminPortal: "بوابة الإدارة",
+          adminDesc: "نظرة عامة على النظام",
+          welcomeBack: "مرحبًا بعودتك",
+          restricted: "دخول مقيد",
+          idNumber: "الرقم الوظيفي",
+          password: "كلمة المرور",
+          login: "تسجيل الدخول",
+          registerNew: "تسجيل حساب جديد",
+          fullName: "الاسم الكامل",
+          position: "المنصب",
+          branch: "الفرع",
+          email: "البريد الإلكتروني",
+          register: "تسجيل",
+          id4Digits: "الرقم الوظيفي (4 أرقام)",
+          regSuccess: "تم تقديم التسجيل للموافقة. سيقوم المسؤول بمراجعة طلبك.",
+          evalForm: "نموذج التقييم",
+          traineeInfo: "بيانات المتدرب والمدرب",
+          traineeID: "رقم المتدرب",
+          traineeName: "اسم المتدرب",
+          evalType: "نوع التقييم",
+          trainerName: "اسم المدرب",
+          select: "اختر...",
+          firstHalf: "النصف الأول",
+          secondHalf: "النصف الثاني",
+          teamMember: "عضو فريق",
+          teamLeader: "قائد فريق",
+          outstanding: "ممتاز",
+          exceeds: "يفوق التوقعات",
+          meets: "يلبي التوقعات",
+          inconsistent: "غير ثابت",
+          unsatisfactory: "غير مرضي",
+          submit: "إرسال التقييم",
+          totalScore: "الدرجة الكلية",
+          overallRating: "التقدير العام",
+          evalComplete: "اكتمل التقييم!",
+          evalSaved: "تم حفظ التقييم بنجاح.",
+          preview: "معاينة",
+          download: "تحميل",
+          openDrive: "فتح في Drive",
+          evalAnother: "تقييم آخر",
+          dashboard: "لوحة المعلومات",
+          printDash: "طباعة اللوحة",
+          printTable: "طباعة الجدول",
+          showing: "عزض",
+          records: "متدرب",
+          sn: "م",
+          grade: "التقدير",
+          comments: "ملاحظات",
+          requests: "الطلبات",
+          pending: "قيد الانتظار",
+          approved: "مقبول",
+          rejected: "مرفوض",
+          allow: "قبول",
+          deny: "رفض",
+          trainerOverview: "نظرة عامة للمدربين",
+          colTotalTM: "إجمالي الأعضاء",
+          colTotalEval: "إجمالي التقييمات",
+          colBranches: "الفروع",
+          colMonthlyComp: "مكتمل (شهري)",
+          col1stHalf: "النصف الأول",
+          colDays: "أيام النشاط",
+          employees: "الموظفين المقيمين",
+          kpiEmployees: "إجمالي الموظفين",
+          kpiAvg: "متوسط الدرجات",
+          kpiPos: "عضو | قائد",
+          kpiHalves: "نصف أول / ثاني",
+          gradeDist: "توزيع الدرجات",
+          catPerf: "أداء الفئات",
+          quickSelect: "اختيار سريع (شهر / سنة)",
+          dateRange: "نطاق التاريخ",
+          filters: "تصفية",
+          all: "الكل",
+          year: "سنة",
+          pendingReg: "تسجيلات معلقة",
+          pendingEdit: "طلبات تعديل معلقة",
+          reasonDel: "سبب الحذف",
+          submitReq: "إرسال الطلب",
+          reqTitle: "طلب حذف / تعديل",
+          reqDesc: "أنت تطلب حذف هذا التقييم لإعادة إرساله. يتطلب موافقة المسؤول.",
+          logout: "خروج",
+          viewPdf: "ملف PDF",
+          loadingData: "جاري تحليل البيانات...",
+          noData: "لا توجد سجلات تطابق عوامل التصفية.",
+          idPlaceholder: "بحث...",
+          adminOverview: "نظرة عامة للمسؤول",
+          myTracker: "تتبع الأداء الخاص بي",
+          viewingAdmin: "عرض البيانات لجميع المدربين والمتدربين عبر النظام.",
+          viewingTrainer: "عرض البيانات للمدرب: ",
+          countBreakdown: "تفاصيل العدد",
+          forgotPass: "هل نسيت كلمة السر؟",
+          resetPass: "إعادة تعيين كلمة السر",
+          enterId: "أدخل الرقم الوظيفي",
+          sendCode: "إرسال رمز التحقق",
+          enterCode: "أدخل الرمز",
+          newPass: "كلمة المرور الجديدة",
+          confirmPass: "تأكيد كلمة المرور",
+          changePass: "تغيير كلمة المرور",
+          codeSent: "تم إرسال الرمز إلى بريدك الإلكتروني!",
+          passChanged: "تم تغيير كلمة المرور بنجاح! الرجاء تسجيل الدخول.",
+          codeInvalid: "رمز غير صحيح",
+          profilePhoto: "الصورة الشخصية",
+          uploadImage: "رفع صورة",
+          openCamera: "فتح الكاميرا",
+          takePhoto: "التقاط صورة",
+          retake: "إعادة",
+          closeCamera: "إغلاق الكاميرا",
+          photoRequired: "الصورة الشخصية مطلوبة"
+        }
+      };
+
+      // --- LANGUAGE CONTEXT ---
+      const LanguageContext = createContext();
+      const useTranslation = () => useContext(LanguageContext);
+
+      // --- API Service ---
+      const server = {
+        login: (id, pass, portal) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiLogin(id, pass, portal)),
+        submitRegistration: (data) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiSubmitRegistration(data)),
+        logout: (user) => new Promise((res) => google.script.run.withSuccessHandler(res).apiLogout(user)),
+        getFTDatabase: () => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiGetFTDatabase()),
+        getQuestions: () => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiGetQuestions()),
+        checkPrev: (id) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiCheckPreviousEvaluation(id)),
+        submit: (data) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiSubmitEvaluation(data)),
+        getStats: () => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiGetDashboardStats()),
+        getReport: (id) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiGetReport(id)),
+        getCombinedReport: (id1, id2) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiGetCombinedReport(id1, id2)),
+        // New APIs
+        requestEdit: (respId, trainerName, reason) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiRequestEdit(respId, trainerName, reason)),
+        getRequests: (role, userName) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiGetRequests(role, userName)),
+        processRequest: (reqId, action) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiProcessRequest(reqId, action)),
+        // Reg Request Admin APIs
+        getRegistrationRequests: () => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiGetRegistrationRequests()),
+        processRegistration: (reqId, action) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiProcessRegistration(reqId, action)),
+        // Send Email API
+        sendEmail: (to, trainerEmail, name, type, pdf) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiSendEvaluationEmail(to, trainerEmail, name, type, pdf)),
+        // Password Reset APIs
+        requestPasswordReset: (id) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiRequestPasswordReset(id)),
+        resetPassword: (id, otp, newPass) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiResetPassword(id, otp, newPass))
+      };
+
+      // --- Icons Helper ---
+      const Icon = ({ name, size = 20, className = "" }) => {
+        useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+        return <i data-lucide={name} className={className} style={{ fontSize: size, width: size, height: size }}></i>;
+      };
+
+      // --- Components ---
+      const Card = ({ children, title, className = "", titleClass = "" }) => (
+        <div className={`bg-white rounded-xl shadow-sm border border-zinc-200 ${className.includes('overflow-visible') ? '' : 'overflow-hidden'} ${className}`}>
+          {title && <div className={`px-5 py-3 border-b border-zinc-100 font-semibold text-slate-800 flex justify-between items-center ${titleClass}`}>{title}</div>}
+          <div className="p-5">{children}</div>
+        </div>
+      );
+
+      const Alert = ({ type, message }) => {
+        const styles = {
+           error: 'bg-red-50 text-red-700 border-red-200',
+           success: 'bg-green-50 text-green-700 border-green-200',
+           warning: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+           info: 'bg-blue-50 text-blue-700 border-blue-200'
+        };
+        const icons = {
+           error: 'alert-octagon', success: 'check-circle', warning: 'alert-triangle', info: 'info'
+        };
+        return (
+          <div className={`p-4 rounded-lg border flex items-center gap-3 text-sm animate-fade mb-4 ${styles[type]}`}>
+            <Icon name={icons[type]} size={20} />
+            <span className="font-medium">{message}</span>
+          </div>
+        );
+      };
+
+      const Button = ({ children, onClick, variant = "primary", isLoading, className = "", disabled }) => {
+        const base = "w-full py-2.5 px-4 rounded-lg font-medium transition-all flex justify-center items-center gap-2 shadow-sm active:scale-[0.98]";
+        const styles = {
+          primary: "bg-orange-600 text-white hover:bg-orange-700 disabled:bg-orange-300",
+          secondary: "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-50 disabled:bg-zinc-100",
+          success: "bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-300",
+          danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300"
+        };
+        return (
+          <button onClick={onClick} disabled={isLoading || disabled} className={`${base} ${styles[variant]} ${className} disabled:opacity-70 disabled:cursor-not-allowed`}>
+            {isLoading ? <div className="loader w-5 h-5"></div> : children}
+          </button>
+        );
+      };
+
+      const Input = ({ label, ...props }) => (
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+          <input className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none" {...props} />
+        </div>
+      );
+
+      const Select = ({ label, options, ...props }) => (
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+          <select className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-orange-500 bg-white" {...props}>
+            {options.map((o, i) => <option key={i} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      );
+
+      const MultiSelect = ({ label, options, selected, onChange }) => {
+        const { t } = useTranslation();
+        const [isOpen, setIsOpen] = useState(false);
+        const [query, setQuery] = useState('');
+        const containerRef = useRef(null);
+        
+        const filteredOptions = options.filter(o => 
+           String(o).toLowerCase().includes(query.toLowerCase())
+        );
+
+        const toggle = (val) => {
+          if (selected.includes(val)) onChange(selected.filter(x => x !== val));
+          else onChange([...selected, val]);
+        };
+        
+        // Close on click outside
+        useEffect(() => {
+           const handleClickOutside = (event) => {
+             if (containerRef.current && !containerRef.current.contains(event.target)) {
+               setIsOpen(false);
+             }
+           };
+           document.addEventListener("mousedown", handleClickOutside);
+           return () => document.removeEventListener("mousedown", handleClickOutside);
+        }, [containerRef]);
+
+        return (
+          <div className="relative mb-4" ref={containerRef}>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+            <button 
+              onClick={() => setIsOpen(!isOpen)} 
+              className="w-full text-left text-sm p-2 border rounded focus:ring-2 focus:ring-orange-500 bg-white flex justify-between items-center"
+            >
+              <span className="truncate">{selected.length ? `${selected.length} selected` : t('all')}</span>
+              <Icon name="chevron-down" size={16} />
+            </button>
+            {isOpen && (
+              <div className="absolute z-50 w-full mt-1 bg-white border rounded shadow-xl overflow-hidden animate-fade">
+                <div className="p-2 border-b bg-gray-50">
+                   <input 
+                      type="text" 
+                      placeholder={t('idPlaceholder')}
+                      className="w-full text-xs p-1.5 border rounded focus:outline-none focus:border-orange-500"
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                      autoFocus
+                   />
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                   {filteredOptions.length > 0 ? filteredOptions.map(opt => (
+                     <div key={opt} onClick={() => toggle(opt)} className="px-3 py-2 hover:bg-orange-50 cursor-pointer flex items-center gap-2 text-sm border-b border-gray-50 last:border-0">
+                       <input type="checkbox" checked={selected.includes(opt)} readOnly className="rounded text-orange-600 focus:ring-orange-500 pointer-events-none" />
+                       <span className="truncate">{opt}</span>
+                     </div>
+                   )) : <div className="p-3 text-xs text-gray-400 text-center">No options found</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      };
+      
+      const Modal = ({ title, children, onClose }) => (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="px-5 py-4 border-b flex justify-between items-center bg-gray-50">
+                    <h3 className="font-bold text-gray-800">{title}</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><Icon name="x" size={20}/></button>
+                </div>
+                <div className="p-5">{children}</div>
+            </div>
+        </div>
+      );
+
+      const ResetPasswordModal = ({ onClose }) => {
+         const { t } = useTranslation();
+         const [step, setStep] = useState(1);
+         const [id, setId] = useState('');
+         const [otp, setOtp] = useState('');
+         const [newPass, setNewPass] = useState('');
+         const [confirmPass, setConfirmPass] = useState('');
+         const [loading, setLoading] = useState(false);
+         const [msg, setMsg] = useState(null);
+
+         const handleSendCode = async () => {
+            if(!id) return;
+            setLoading(true); setMsg(null);
+            try {
+               await server.requestPasswordReset(id);
+               setStep(2);
+               setMsg({ type: 'success', text: t('codeSent') });
+            } catch(e) {
+               setMsg({ type: 'error', text: e.message });
+            } finally {
+               setLoading(false);
+            }
+         };
+
+         const handleSubmit = async () => {
+            if(!otp || !newPass || !confirmPass) return;
+            if(newPass !== confirmPass) { setMsg({type:'error', text: "Passwords do not match"}); return; }
+            setLoading(true); setMsg(null);
+            try {
+               await server.resetPassword(id, otp, newPass);
+               setMsg({ type: 'success', text: t('passChanged') });
+               setTimeout(onClose, 2000);
+            } catch(e) {
+               setMsg({ type: 'error', text: e.message });
+            } finally {
+               setLoading(false);
+            }
+         };
+
+         return (
+            <Modal title={t('resetPass')} onClose={onClose}>
+               {msg && <Alert type={msg.type} message={msg.text} />}
+               {step === 1 ? (
+                  <>
+                     <Input label={t('enterId')} value={id} onChange={e => setId(e.target.value)} placeholder="e.g. 1001" />
+                     <Button onClick={handleSendCode} isLoading={loading}>{t('sendCode')}</Button>
+                  </>
+               ) : (
+                  <>
+                     <Input label={t('enterCode')} value={otp} onChange={e => setOtp(e.target.value)} placeholder="6-digit code" />
+                     <Input label={t('newPass')} type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
+                     <Input label={t('confirmPass')} type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
+                     <Button onClick={handleSubmit} isLoading={loading}>{t('changePass')}</Button>
+                  </>
+               )}
+            </Modal>
+         );
+      };
+
+      // --- Layout ---
+      const Layout = ({ children, title, user, onLogout, onBack, className = "bg-zinc-50" }) => {
+        const { lang, setLang, t } = useTranslation();
+        return (
+          <div className={`flex flex-col h-full animate-fade ${className}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+            <header className="bg-zinc-900 text-white shadow-md z-10 flex-none print:hidden border-b border-zinc-800">
+              <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {onBack && <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-full"><Icon name={lang === 'ar' ? "arrow-right" : "arrow-left"} /></button>}
+                  <div>
+                    <h1 className="font-bold text-lg leading-tight text-zinc-100">{title}</h1>
+                    {user && <div className="text-xs text-orange-400 opacity-90">{user.name} ({user.position})</div>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                   <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm font-bold transition-colors">
+                    {lang === 'en' ? 'عربي' : 'English'}
+                  </button>
+                  {user && (
+                    <button onClick={onLogout} className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded-lg text-sm transition-colors border border-zinc-700">
+                      <Icon name="log-out" size={16} /> {t('logout')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </header>
+            <main className="flex-1 overflow-y-auto p-4 md:p-6 print:overflow-visible print:h-auto print:p-0">
+              <div className="max-w-7xl mx-auto">{children}</div>
+            </main>
+          </div>
+        );
+      };
+
+      // --- Pages ---
+
+      const Landing = ({ onSelect }) => {
+        const { t } = useTranslation();
+        return (
+          <Layout title="" className="bg-zinc-950">
+             <div className="flex flex-col items-center justify-center h-full">
+              <div className="mb-12 animate-fade text-center max-w-2xl mx-auto">
+                <div className="inline-block p-4 bg-orange-600/10 rounded-full mb-6 border border-orange-600/20 backdrop-blur-sm">
+                  <Icon name="layout-grid" size={48} className="text-orange-500" />
+                </div>
+                <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight">{t('portalTitle')}</h1>
+                <p className="text-zinc-400 text-lg">{t('selectModule')}</p>
+              </div>
+              <div className="grid md:grid-cols-3 gap-6 w-full max-w-5xl px-4">
+                {/* Evaluation Module */}
+                <button onClick={() => onSelect('EVALUATION')} className="group bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-orange-500/50 p-8 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-orange-900/10 text-center relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-orange-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="w-16 h-16 bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-zinc-700 group-hover:border-orange-500/30">
+                    <Icon name="clipboard-check" size={32} className="text-orange-500" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-zinc-100 mb-3">{t('evalPortal')}</h2>
+                  <p className="text-zinc-500 group-hover:text-zinc-400 text-sm leading-relaxed transition-colors">{t('evalDesc')}</p>
+                </button>
+                
+                {/* Tracker Module */}
+                <button onClick={() => onSelect('DASHBOARD')} className="group bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 p-8 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl text-center relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="w-16 h-16 bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-zinc-700">
+                    <Icon name="bar-chart-3" size={32} className="text-zinc-300" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-zinc-100 mb-3">{t('trainerTracker')}</h2>
+                  <p className="text-zinc-500 group-hover:text-zinc-400 text-sm leading-relaxed transition-colors">{t('trackerDesc')}</p>
+                </button>
+
+                {/* Admin Module */}
+                <button onClick={() => onSelect('ADMIN')} className="group bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 p-8 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl text-center relative overflow-hidden">
+                   <div className="absolute top-0 left-0 w-full h-1 bg-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="w-16 h-16 bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300 border border-zinc-700">
+                    <Icon name="shield-check" size={32} className="text-zinc-300" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-zinc-100 mb-3">{t('adminPortal')}</h2>
+                  <p className="text-zinc-500 group-hover:text-zinc-400 text-sm leading-relaxed transition-colors">{t('adminDesc')}</p>
+                </button>
+              </div>
+            </div>
+          </Layout>
+        );
+      };
+
+      const Login = ({ portal, onLogin, onBack, onRegister }) => {
+        const { t, lang } = useTranslation();
+        const [id, setId] = useState('');
+        const [pass, setPass] = useState('');
+        const [loading, setLoading] = useState(false);
+        const [err, setErr] = useState('');
+        const [showPass, setShowPass] = useState(false);
+        const [resetOpen, setResetOpen] = useState(false);
+
+        const getTitle = () => {
+          if (portal === 'EVALUATION') return t('evalPortal');
+          if (portal === 'ADMIN') return t('adminPortal');
+          return t('trainerTracker');
+        };
+
+        const getIconColor = () => {
+          if (portal === 'EVALUATION') return 'bg-orange-100 text-orange-600';
+          if (portal === 'ADMIN') return 'bg-zinc-200 text-zinc-700';
+          return 'bg-zinc-100 text-zinc-600';
+        };
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          setLoading(true); setErr('');
+          try {
+            const user = await server.login(id, pass, portal);
+            if (portal === 'ADMIN' && user.role !== 'ADMIN') {
+              throw new Error("Access Denied: You do not have Administrator privileges.");
+            }
+            onLogin(user);
+          } catch(e) { 
+             setErr(e.message || "Invalid Credentials. Please check ID and Password."); 
+          } finally { 
+             setLoading(false); 
+          }
+        };
+
+        return (
+          <Layout title={getTitle()} onBack={onBack}>
+            <div className="max-w-md mx-auto mt-10">
+              <Card>
+                <div className="text-center mb-6">
+                  <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-3 ${getIconColor()}`}>
+                    <Icon name={portal === 'ADMIN' ? 'shield' : 'user'} />
+                  </div>
+                  <h2 className="text-xl font-bold">{t('welcomeBack')}</h2>
+                  {portal === 'ADMIN' && <p className="text-xs text-slate-500 mt-1">{t('restricted')}</p>}
+                </div>
+                {err && <Alert type="error" message={err} />}
+                <form onSubmit={handleSubmit}>
+                  <Input label={t('idNumber')} value={id} onChange={e => setId(e.target.value)} required />
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('password')}</label>
+                    <div className="relative">
+                      <input 
+                        type={showPass ? "text" : "password"} 
+                        value={pass} 
+                        onChange={e => setPass(e.target.value)} 
+                        className={`w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none ${lang === 'ar' ? 'pl-10' : 'pr-10'}`}
+                        required 
+                      />
+                      <button type="button" onClick={() => setShowPass(!showPass)} className={`absolute top-2.5 text-gray-400 hover:text-gray-600 ${lang === 'ar' ? 'left-3' : 'right-3'}`}>
+                        <Icon name={showPass ? "eye-off" : "eye"} size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end mb-4 -mt-2">
+                      <button type="button" onClick={() => setResetOpen(true)} className="text-xs text-orange-600 hover:underline">{t('forgotPass')}</button>
+                  </div>
+
+                  <Button isLoading={loading} className="mt-2">{t('login')}</Button>
+                </form>
+                {portal === 'EVALUATION' && (
+                  <div className="mt-4 text-center">
+                    <button onClick={onRegister} className="text-sm text-orange-600 hover:underline">{t('registerNew')}</button>
+                  </div>
+                )}
+              </Card>
+            </div>
+            
+            {resetOpen && <ResetPasswordModal onClose={() => setResetOpen(false)} />}
+          </Layout>
+        );
+      };
+
+      const Register = ({ onBack }) => {
+        const { t } = useTranslation();
+        const [form, setForm] = useState({ name:'', idNumber:'', password:'', position:'', email:'', imageBase64: '', mimeType: '' });
+        const [loading, setLoading] = useState(false);
+        const [showSuccessModal, setShowSuccessModal] = useState(false);
+        const [imagePreview, setImagePreview] = useState(null);
+        const [isProcessingImage, setIsProcessingImage] = useState(false);
+        
+        // Camera States
+        const [isCameraOpen, setIsCameraOpen] = useState(false);
+        const videoRef = useRef(null);
+        const streamRef = useRef(null);
+        const fileInputRef = useRef(null); // Ref for file input
+
+        // --- Robust Image Handling Helpers ---
+        const processImage = (fileOrBlob) => {
+           setIsProcessingImage(true);
+           const reader = new FileReader();
+           reader.onload = (e) => {
+              const img = new Image();
+              // Prevent white canvas issues by ensuring crossOrigin is set if needed (mostly for remote images but good practice)
+              img.crossOrigin = "Anonymous";
+              
+              img.onload = () => {
+                 const canvas = document.createElement('canvas');
+                 const MAX_SIZE = 600; // Reduced to 600 to ensure success payload size
+                 let w = img.width;
+                 let h = img.height;
+                 
+                 // Calculate aspect ratio
+                 if (w > h) {
+                    if (w > MAX_SIZE) { 
+                       h = Math.round(h * (MAX_SIZE / w)); 
+                       w = MAX_SIZE; 
+                    }
+                 } else {
+                    if (h > MAX_SIZE) { 
+                       w = Math.round(w * (MAX_SIZE / h)); 
+                       h = MAX_SIZE; 
+                    }
+                 }
+                 
+                 // CRITICAL FIX: Ensure dimensions are never 0 or float
+                 canvas.width = Math.floor(w) || 100;
+                 canvas.height = Math.floor(h) || 100;
+                 
+                 const ctx = canvas.getContext('2d');
+                 if (ctx) {
+                    // Fill background white to handle transparent PNGs turning black
+                    ctx.fillStyle = "#FFFFFF";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    try {
+                       // Force JPEG compression at 0.7 quality to reduce payload size
+                       const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                       setImagePreview(dataUrl);
+                       // Update form with JPEG data
+                       setForm(prev => ({ ...prev, imageBase64: dataUrl, mimeType: 'image/jpeg' }));
+                    } catch (err) {
+                       alert("Error converting image. Please try a different photo.");
+                       console.error(err);
+                    }
+                 }
+                 setIsProcessingImage(false);
+              };
+              
+              img.onerror = () => {
+                 alert("Failed to load image preview. Please try another file.");
+                 setIsProcessingImage(false);
+              };
+              
+              img.src = e.target.result;
+           };
+           reader.readAsDataURL(fileOrBlob);
+        };
+
+        const handleFileChange = (e) => {
+           if (e.target.files && e.target.files[0]) {
+              processImage(e.target.files[0]);
+              // Clear input value so same file can be selected again if retry is needed
+              e.target.value = '';
+           }
+        };
+
+        const startCamera = async () => {
+           setIsCameraOpen(true);
+           try {
+              const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+              streamRef.current = stream;
+              if (videoRef.current) {
+                 videoRef.current.srcObject = stream;
+              }
+           } catch(e) {
+              alert("Camera access denied or not available. Please allow camera permissions or use Upload.");
+              setIsCameraOpen(false);
+           }
+        };
+
+        const stopCamera = () => {
+           if (streamRef.current) {
+              streamRef.current.getTracks().forEach(track => track.stop());
+              streamRef.current = null;
+           }
+           setIsCameraOpen(false);
+        };
+
+        const capturePhoto = () => {
+           if (videoRef.current) {
+              const video = videoRef.current;
+              // Check if video has dimensions
+              if (video.videoWidth > 0 && video.videoHeight > 0) {
+                 const canvas = document.createElement('canvas');
+                 canvas.width = video.videoWidth;
+                 canvas.height = video.videoHeight;
+                 const ctx = canvas.getContext('2d');
+                 ctx.drawImage(video, 0, 0);
+                 canvas.toBlob(blob => {
+                    processImage(blob);
+                    stopCamera();
+                 }, 'image/jpeg');
+              }
+           }
+        };
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          if (!form.imageBase64) {
+             alert(t('photoRequired'));
+             return;
+          }
+
+          setLoading(true);
+          try {
+            await server.submitRegistration({...form, branch: "TBD"});
+            setShowSuccessModal(true);
+          } catch(e) { 
+            alert(e.message); 
+          } finally { 
+            setLoading(false); 
+          }
+        };
+
+        return (
+          <Layout title={t('registerNew')} onBack={onBack}>
+            <div className="max-w-md mx-auto mt-4">
+              <Card>
+                <form onSubmit={handleSubmit}>
+                  {/* Profile Photo Section */}
+                  <div className="mb-6 flex flex-col items-center">
+                     <label className="block text-sm font-medium text-slate-700 mb-2">{t('profilePhoto')} <span className="text-red-500">*</span></label>
+                     
+                     <div className="w-24 h-24 rounded-full bg-zinc-100 border border-zinc-300 flex items-center justify-center overflow-hidden mb-3 relative group">
+                        {isProcessingImage ? (
+                           <div className="loader loader-primary w-8 h-8"></div>
+                        ) : imagePreview ? (
+                           <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                           <Icon name="user" size={40} className="text-zinc-300" />
+                        )}
+                        {/* Overlay for re-upload indication */}
+                        {imagePreview && !isProcessingImage && (
+                           <div className="absolute inset-0 bg-black/20 hidden group-hover:flex items-center justify-center rounded-full">
+                              <Icon name="pencil" size={16} className="text-white" />
+                           </div>
+                        )}
+                     </div>
+
+                     <div className="flex gap-2">
+                        <label className={`px-3 py-1.5 bg-white border border-zinc-300 rounded text-xs font-medium cursor-pointer hover:bg-zinc-50 flex items-center gap-1 ${isProcessingImage ? 'opacity-50 pointer-events-none' : ''}`}>
+                           <Icon name="upload" size={14} /> {t('uploadImage')}
+                           <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} ref={fileInputRef} />
+                        </label>
+                        <button type="button" onClick={startCamera} disabled={isProcessingImage} className="px-3 py-1.5 bg-white border border-zinc-300 rounded text-xs font-medium hover:bg-zinc-50 flex items-center gap-1 disabled:opacity-50">
+                           <Icon name="camera" size={14} /> {t('openCamera')}
+                        </button>
+                     </div>
+                  </div>
+
+                  <Input label={t('fullName')} value={form.name} onChange={e => setForm({...form, name:e.target.value})} required />
+                  {/* ID Validation: 4 Digits */}
+                  <div className="mb-4">
+                     <label className="block text-sm font-medium text-slate-700 mb-1">{t('id4Digits')}</label>
+                     <input 
+                        className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none" 
+                        value={form.idNumber} 
+                        onChange={e => {
+                           const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                           setForm({...form, idNumber:val});
+                        }}
+                        pattern="\d{4}"
+                        required 
+                     />
+                  </div>
+                  <Input label={t('password')} type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} required />
+                  <Select label={t('position')} value={form.position} onChange={e => setForm({...form, position:e.target.value})} options={[{label:'Trainer', value:'Trainer'}, {label:'Team Leader', value:'TL'}, {label:'Admin', value:'Admin'}]} required />
+                  <Input label={t('email')} type="email" value={form.email} onChange={e => setForm({...form, email:e.target.value})} required />
+                  
+                  <Button isLoading={loading} className="mt-4">{t('register')}</Button>
+                </form>
+              </Card>
+            </div>
+
+            {/* Camera Modal */}
+            {isCameraOpen && (
+               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 animate-fade">
+                  <div className="relative w-full max-w-md bg-black rounded-xl overflow-hidden shadow-2xl">
+                     <video ref={videoRef} autoPlay playsInline className="w-full h-auto bg-black"></video>
+                     <div className="absolute bottom-4 left-0 w-full flex justify-center items-center gap-4">
+                        <button onClick={stopCamera} className="px-4 py-2 bg-white/20 text-white text-sm rounded-full backdrop-blur-md hover:bg-white/30">{t('closeCamera')}</button>
+                        <button onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 hover:scale-105 transition-transform flex items-center justify-center shadow-lg">
+                           <div className="w-14 h-14 bg-white rounded-full border-2 border-black"></div>
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            )}
+
+            {showSuccessModal && (
+               <Modal title="Registration Submitted" onClose={onBack}>
+                  <div className="text-center">
+                     <div className="mx-auto w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
+                        <Icon name="check" size={24} />
+                     </div>
+                     <h3 className="text-lg font-bold text-slate-800 mb-2">Request Sent!</h3>
+                     <p className="text-slate-600 mb-6 text-sm">{t('regSuccess')}</p>
+                     <Button onClick={onBack}>Return to Login</Button>
+                  </div>
+               </Modal>
+            )}
+          </Layout>
+        );
+      };
+
+      const EvaluationForm = ({ user, onLogout }) => {
+        const { t } = useTranslation();
+        const [loading, setLoading] = useState(true);
+        const [db, setDb] = useState([]);
+        const [qs, setQs] = useState([]);
+        const [form, setForm] = useState({ traineeName:'', traineeId:'', email: '', evaluationType:'1st Half', position:'Team Member', trainerName:'', branch:'', teamLeader:'', area:'', overallGrade:'A', scores:{} });
+        const [statusData, setStatusData] = useState(null);
+        const [submitting, setSubmitting] = useState(false);
+        const [calculation, setCalculation] = useState({ totalScore: 0, letterGrade: 'D', categoryScores: {} });
+        const [alertMsg, setAlertMsg] = useState(null); 
+        
+        // Lookup Options
+        const [traineeOptions, setTraineeOptions] = useState([]);
+        const [branchOptions, setBranchOptions] = useState([]);
+        
+        const [pdfResult, setPdfResult] = useState(null);
+        const [sendingEmail, setSendingEmail] = useState(false);
+        const [emailStatus, setEmailStatus] = useState(null);
+
+        const gradeMeta = {
+          "A+": { text: "Excellent, Consider for Mentorship", stars: "⭐⭐⭐⭐⭐" },
+          "A":  { text: "Good, Maintain and Motivate", stars: "⭐⭐⭐⭐" },
+          "B":  { text: "Continue routine supervision", stars: "⭐⭐⭐" },
+          "C":  { text: "Immediate coaching", stars: "⭐⭐" },
+          "D":  { text: "Mandatory retraining & plan", stars: "⭐" },
+          "-":  { text: "Pending", stars: "" }
+        };
+
+        useEffect(() => {
+          Promise.all([server.getFTDatabase(), server.getQuestions()]).then(([d, q]) => {
+            setDb(d); setQs(q); setLoading(false);
+          });
+          
+          if (user) {
+             setForm(f => ({...f, trainerName: user.name}));
+             if(user.branch) setForm(f => ({...f, branch: user.branch}));
+          }
+        }, []);
+        
+        useEffect(() => {
+           if (!db.length) return;
+           const map = new Map();
+           db.forEach(r => {
+              if (r.traineeId) map.set(String(r.traineeId), r.traineeName);
+           });
+           setTraineeOptions(Array.from(map.entries()).map(([id, name]) => ({ id, name })));
+        }, [db]);
+
+        useEffect(() => {
+            if (!form.trainerName || !db.length) return;
+            const trainerRows = db.filter(r => r.trainerName === form.trainerName);
+            const branches = [...new Set(trainerRows.map(r => r.branch).filter(Boolean))];
+            setBranchOptions(branches);
+
+            if (branches.length === 1 && form.branch !== branches[0]) {
+               const row = trainerRows.find(r => r.branch === branches[0]);
+               setForm(f => ({...f, branch: branches[0], teamLeader: row?.teamLeader||'', area: row?.area||''}));
+            }
+        }, [form.trainerName, db]);
+
+        const handleIdChange = (e) => {
+           const val = e.target.value;
+           const match = traineeOptions.find(o => o.id === val);
+           setForm(f => ({
+               ...f, 
+               traineeId: val,
+               traineeName: match ? match.name : f.traineeName 
+           }));
+           if (match) checkId(val);
+        };
+
+        const handleBranchChange = (e) => {
+           const b = e.target.value;
+           const row = db.find(r => r.trainerName === form.trainerName && r.branch === b);
+           setForm(f => ({...f, branch: b, teamLeader: row?.teamLeader||'', area: row?.area||''}));
+        };
+
+        useEffect(() => {
+          if (!qs.length) return;
+          
+          const gradeValues = { "A+": 100, "A": 90, "B": 80, "C": 70, "D": 60 };
+          const categories = {};
+          
+          qs.forEach(q => {
+            if (q.type === 'radio' || q.type === 'dropdown') {
+              const answer = form.scores[q.id];
+              const score = gradeValues[answer] || 0;
+              if (answer) {
+                if (!categories[q.category]) categories[q.category] = { sum: 0, count: 0 };
+                categories[q.category].sum += score;
+                categories[q.category].count++;
+              }
+            }
+          });
+
+          let totalSum = 0;
+          let totalCount = 0;
+          const catScores = {};
+
+          Object.keys(categories).forEach(cat => {
+            const avg = categories[cat].sum / categories[cat].count;
+            catScores[cat] = Math.round(avg);
+            totalSum += avg; 
+            totalCount++; 
+          });
+
+          const grandAvg = totalCount > 0 ? totalSum / totalCount : 0;
+          let letter = 'D';
+          if (grandAvg >= 98) letter = 'A+';
+          else if (grandAvg >= 90) letter = 'A';
+          else if (grandAvg >= 80) letter = 'B';
+          else if (grandAvg >= 70) letter = 'C';
+          else letter = 'D';
+
+          setCalculation({ totalScore: Math.round(grandAvg), letterGrade: letter, categoryScores: catScores });
+          setForm(f => ({ ...f, overallGrade: letter }));
+        }, [form.scores, qs]);
+
+        const checkId = async (specificId) => {
+          const targetId = specificId || form.traineeId;
+          if(!targetId) return;
+          
+          setAlertMsg(null);
+          setStatusData(null);
+          
+          try {
+            const res = await server.checkPrev(targetId);
+            if(res && res.found) { 
+              setStatusData(res);
+              setForm(f => ({
+                ...f, 
+                traineeName: res.traineeName || f.traineeName,
+                position: res.position || f.position,
+                email: res.email || f.email
+              })); 
+
+              if (res.completed) {
+                  setAlertMsg({ type: 'error', msg: "Evaluation Complete" });
+              } else if (res.first) {
+                 setAlertMsg({ type: 'success', msg: "1st Half Found" });
+                 setForm(f => ({ ...f, evaluationType: '2nd Half' }));
+              }
+            }
+          } catch(e) { console.error(e); }
+        };
+
+        const submit = async (e) => {
+          e.preventDefault();
+          if (statusData && statusData.completed) {
+             alert("Cannot submit: Both evaluations are already completed for this month.");
+             return;
+          }
+          setSubmitting(true);
+          setAlertMsg(null);
+          try { 
+             const result = await server.submit(form); 
+             setPdfResult(result);
+          }
+          catch(e) { setAlertMsg({ type: 'error', msg: "Error: "+e.message }); }
+          setSubmitting(false);
+        };
+
+        const sendEmailToEmployee = async () => {
+            if (!form.email) {
+                setEmailStatus({ type: 'error', msg: "No email address found for trainee." });
+                return;
+            }
+            setSendingEmail(true);
+            setEmailStatus(null);
+            try {
+                await server.sendEmail(form.email, user.email, form.traineeName, form.evaluationType, pdfResult.base64);
+                setEmailStatus({ type: 'success', msg: "Email sent to All Recipients!" });
+            } catch (e) {
+                setEmailStatus({ type: 'error', msg: "Failed to send email: " + e.message });
+            } finally {
+                setSendingEmail(false);
+            }
+        };
+
+        const resetForm = () => {
+            setPdfResult(null);
+            setSendingEmail(false);
+            setEmailStatus(null);
+            setForm(f => ({ 
+               ...f, 
+               traineeId: '', 
+               traineeName: '', 
+               email: '',
+               scores: {}, 
+               evaluationType: '1st Half',
+               overallGrade: 'A' 
+            }));
+            setStatusData(null);
+            setAlertMsg(null);
+        };
+        
+        const downloadPdf = () => {
+           if(!pdfResult || !pdfResult.base64) return;
+           const link = document.createElement('a');
+           link.href = `data:application/pdf;base64,${pdfResult.base64}`;
+           link.download = `${form.traineeId}-${form.traineeName}.pdf`;
+           document.body.appendChild(link);
+           link.click();
+           document.body.removeChild(link);
+        };
+
+        const openPreview = () => {
+           if(!pdfResult || !pdfResult.base64) {
+             alert("PDF data not available.");
+             return;
+           }
+           try {
+             const byteCharacters = atob(pdfResult.base64);
+             const byteNumbers = new Array(byteCharacters.length);
+             for (let i = 0; i < byteCharacters.length; i++) {
+                 byteNumbers[i] = byteCharacters.charCodeAt(i);
+             }
+             const byteArray = new Uint8Array(byteNumbers);
+             const file = new Blob([byteArray], { type: 'application/pdf' });
+             const fileURL = URL.createObjectURL(file);
+             window.open(fileURL, '_blank');
+           } catch(e) {
+             alert("Could not open preview: " + e.message);
+           }
+        };
+
+        const getSummaryStyle = (grade) => {
+            const base = "border-none text-slate-900 transition-colors duration-300"; 
+            if (grade.startsWith('A')) return `${base} bg-emerald-400`; 
+            if (grade === 'B') return `${base} bg-yellow-400`; 
+            if (grade === 'C') return `${base} bg-orange-400`; 
+            return `${base} bg-red-400`; 
+        };
+
+        if(loading) return <div className="flex justify-center p-10"><div className="loader loader-primary"></div></div>;
+
+        if (pdfResult) {
+            return (
+              <Layout title={t('evalComplete')} user={user} onLogout={onLogout}>
+                  <div className="max-w-md mx-auto mt-10 text-center animate-fade">
+                      <Card className="border-t-4 border-emerald-500">
+                          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <Icon name="check" size={32} className="text-emerald-600" />
+                          </div>
+                          <h2 className="text-2xl font-bold text-slate-800 mb-2">{t('evalComplete')}</h2>
+                          <p className="text-slate-500 mb-6">{t('evalSaved')}</p>
+                          
+                          {emailStatus && (
+                             <Alert type={emailStatus.type} message={emailStatus.msg} />
+                          )}
+
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <button onClick={openPreview} className="w-full py-3 px-4 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 flex items-center justify-center gap-2 transition-colors shadow-sm">
+                                   <Icon name="eye" size={20}/> {t('preview')}
+                                </button>
+                                <button onClick={downloadPdf} className="w-full py-3 px-4 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 flex items-center justify-center gap-2 transition-colors shadow-sm">
+                                   <Icon name="download" size={20}/> {t('download')}
+                                </button>
+                            </div>
+                            
+                            <button 
+                                onClick={sendEmailToEmployee} 
+                                disabled={sendingEmail || (emailStatus && emailStatus.type === 'success')}
+                                className="w-full py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 flex items-center justify-center gap-2 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                               {sendingEmail ? <div className="loader w-5 h-5"></div> : <Icon name="mail" size={20}/>} 
+                               Send Email to All
+                            </button>
+
+                            <div className="text-sm bg-zinc-50 p-4 rounded-lg border border-zinc-200">
+                              <p className="text-slate-600 mb-1">Google Drive Status:</p>
+                              {pdfResult.url && !pdfResult.url.startsWith("Error") ? (
+                                <a href={pdfResult.url} target="_blank" className="text-orange-600 hover:text-orange-800 font-medium inline-flex items-center gap-1 break-all">
+                                  {t('openDrive')} <Icon name="external-link" size={14} />
+                                </a>
+                              ) : (
+                                <span className="text-red-500 text-xs">{pdfResult.url}</span>
+                              )}
+                            </div>
+
+                            <Button onClick={resetForm} variant="secondary">{t('evalAnother')}</Button>
+                          </div>
+                      </Card>
+                  </div>
+              </Layout>
+            );
+        }
+
+        const filteredQs = qs.filter(q => q.targetPosition === 'Both' || q.targetPosition === form.position);
+        
+        return (
+          <Layout title={t('evalForm')} user={user} onLogout={onLogout}>
+            <form onSubmit={submit} className="max-w-3xl mx-auto space-y-6">
+              
+              <div className="bg-white p-4 rounded-xl border border-zinc-200 text-sm grid grid-cols-2 md:grid-cols-5 gap-2 text-center shadow-sm">
+                <div className="bg-green-50 text-green-800 p-1 rounded"><strong>A+</strong> {t('excellent')}</div>
+                <div className="bg-blue-50 text-blue-800 p-1 rounded"><strong>A</strong> {t('exceeds')}</div>
+                <div className="bg-yellow-50 text-yellow-800 p-1 rounded"><strong>B</strong> {t('meets')}</div>
+                <div className="bg-orange-50 text-orange-800 p-1 rounded"><strong>C</strong> {t('inconsistent')}</div>
+                <div className="bg-red-50 text-red-800 p-1 rounded"><strong>D</strong> {t('unsatisfactory')}</div>
+              </div>
+              
+              {statusData && (
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade">
+                    <div className={`p-4 rounded-xl border-l-4 shadow-sm ${statusData.first ? 'bg-white border-green-500' : 'bg-zinc-50 border-zinc-300'}`}>
+                       <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-xs font-bold uppercase text-slate-500 mb-1">{t('firstHalf')}</p>
+                            {statusData.first ? (
+                               <div>
+                                  <p className="text-sm font-bold text-slate-800 leading-tight mb-1">
+                                     {statusData.first.grade} = {gradeMeta[statusData.first.grade]?.text}
+                                  </p>
+                                  <p className="text-xs text-slate-600 flex items-center gap-1 mb-1">
+                                     {gradeMeta[statusData.first.grade]?.stars}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                     Date: {new Date(statusData.first.date).toLocaleDateString('en-GB')}
+                                  </p>
+                               </div>
+                            ) : (
+                               <p className="text-2xl font-bold text-slate-400">{t('pending')}</p>
+                            )}
+                          </div>
+                          {statusData.first && <Icon name="check-circle" className="text-green-500" />}
+                       </div>
+                    </div>
+                    <div className={`p-4 rounded-xl border-l-4 shadow-sm ${statusData.second ? 'bg-white border-green-500' : 'bg-zinc-50 border-zinc-300'}`}>
+                       <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-xs font-bold uppercase text-slate-500 mb-1">{t('secondHalf')}</p>
+                            {statusData.second ? (
+                               <div>
+                                  <p className="text-sm font-bold text-slate-800 leading-tight mb-1">
+                                     {statusData.second.grade} = {gradeMeta[statusData.second.grade]?.text}
+                                  </p>
+                                  <p className="text-xs text-slate-600 flex items-center gap-1 mb-1">
+                                     {gradeMeta[statusData.second.grade]?.stars}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                     Date: {new Date(statusData.second.date).toLocaleDateString('en-GB')}
+                                  </p>
+                               </div>
+                            ) : (
+                               <p className="text-2xl font-bold text-slate-400">{t('pending')}</p>
+                            )}
+                          </div>
+                          {statusData.second && <Icon name="check-circle" className="text-green-500" />}
+                       </div>
+                    </div>
+                 </div>
+              )}
+
+              {alertMsg && <Alert type={alertMsg.type} message={alertMsg.msg} />}
+
+              <Card title={t('traineeInfo')}>
+                <div className="grid md:grid-cols-2 gap-4">
+                   <div className="relative">
+                     <label className="block text-sm font-medium text-slate-700 mb-1">{t('traineeID')}</label>
+                     <input 
+                        list="traineeList" 
+                        value={form.traineeId} 
+                        onChange={handleIdChange} 
+                        onBlur={() => checkId()} 
+                        className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                        required 
+                     />
+                     <datalist id="traineeList">
+                        {traineeOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                     </datalist>
+                   </div>
+                   
+                   <Input label={t('traineeName')} value={form.traineeName} onChange={e => setForm({...form, traineeName:e.target.value})} readOnly={statusData || traineeOptions.some(o => o.id === form.traineeId)} className={statusData ? 'bg-zinc-100' : ''} required />
+                   
+                   <div className="mb-4">
+                       <label className="block text-sm font-medium text-slate-700 mb-1">
+                          {t('email')} <span className="text-red-500">*</span>
+                       </label>
+                       <div className="relative">
+                         <input
+                            type="email"
+                            value={form.email}
+                            onChange={e => setForm({...form, email: e.target.value})}
+                            list="emailOptions"
+                            className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                            required
+                            placeholder="Select or type email..."
+                         />
+                         <div className="absolute right-3 top-2.5 pointer-events-none text-gray-400">
+                            <Icon name="chevron-down" size={16} />
+                         </div>
+                       </div>
+                       <datalist id="emailOptions">
+                          {form.traineeId && <option value={`${form.traineeId}@newboncafe.com`}/>}
+                          <option value="@gmail.com" />
+                          <option value="@outlook.com" />
+                          <option value="@yahoo.com" />
+                       </datalist>
+                   </div>
+
+                   <Select label={t('evalType')} value={form.evaluationType} onChange={e => setForm({...form, evaluationType:e.target.value})} options={[{label:t('firstHalf'), value:'1st Half'}, {label:t('secondHalf'), value:'2nd Half'}]} required />
+                   
+                   <Select label={t('position')} value={form.position} onChange={e => setForm({...form, position:e.target.value})} options={[{label:t('teamMember'), value:'Team Member'}, {label:t('teamLeader'), value:'Team Leader'}]} required />
+                   
+                   <Input label={t('trainerName')} value={form.trainerName} readOnly className="bg-zinc-100 font-semibold text-slate-700" />
+                   
+                   <Select 
+                      label={t('branch')} 
+                      value={form.branch} 
+                      onChange={handleBranchChange} 
+                      options={branchOptions.map(b => ({ label: b, value: b }))} 
+                      required 
+                   />
+                </div>
+              </Card>
+
+              {Object.entries(filteredQs.reduce((a,q) => (a[q.category] = [...(a[q.category]||[]), q], a), {})).map(([cat, qList]) => (
+                <Card 
+                    key={cat} 
+                    title={`${cat} (Avg: ${calculation.categoryScores[cat] || 0}%)`}
+                    className="border-2 border-orange-500 shadow-md"
+                    titleClass="bg-orange-50 text-orange-900"
+                >
+                  {qList.map(q => (
+                    <div key={q.id} className="mb-4 pb-4 border-b border-zinc-100 last:border-0 last:mb-0 last:pb-0">
+                      <p className="font-medium mb-2">{q.text}</p>
+                      {q.type === 'radio' ? (
+                        <div className="flex gap-4 flex-wrap">
+                          {q.options.map(o => (
+                            <label key={o} className="flex items-center gap-1 cursor-pointer hover:bg-zinc-50 p-1 rounded">
+                              <input type="radio" name={q.id} checked={form.scores[q.id] === o} onChange={() => setForm(f => ({...f, scores: {...f.scores, [q.id]: o}}))} className="text-orange-600" required />
+                              <span className="font-bold text-sm">{o}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : q.type === 'dropdown' ? (
+                        <select 
+                          className="w-full border border-zinc-300 rounded p-2 text-sm focus:ring-2 focus:ring-orange-500 bg-white"
+                          value={form.scores[q.id] || ''}
+                          onChange={e => setForm(f => ({...f, scores: {...f.scores, [q.id]: e.target.value}}))}
+                          required
+                        >
+                          <option value="">{t('select')}</option>
+                          {q.options.map(o => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <textarea className="w-full border rounded p-2 text-sm" rows="2" onChange={e => setForm(f => ({...f, scores: {...f.scores, [q.id]: e.target.value}}))} required></textarea>
+                      )}
+                    </div>
+                  ))}
+                </Card>
+              ))}
+
+              <Card title="Evaluation Summary" className={getSummaryStyle(calculation.letterGrade)} titleClass="text-slate-900/70 border-slate-900/10">
+                 <div className="flex justify-between items-center">
+                   <div>
+                     <p className="text-slate-900/60 text-sm uppercase font-bold">{t('totalScore')}</p>
+                     <p className="text-4xl font-bold text-slate-900">{calculation.totalScore}%</p>
+                   </div>
+                   <div className="text-right">
+                     <p className="text-slate-900/60 text-sm uppercase font-bold">{t('overallRating')}</p>
+                     <div className={`text-4xl font-bold px-4 py-1 rounded inline-block mt-1 bg-black/10 text-slate-900`}>
+                       {calculation.letterGrade}
+                     </div>
+                   </div>
+                 </div>
+                 <Button type="submit" isLoading={submitting} disabled={statusData && statusData.completed} className="mt-6 py-4 text-lg bg-slate-900 hover:bg-slate-800 text-white border-none">{t('submit')}</Button>
+              </Card>
+            </form>
+          </Layout>
+        );
+      };
+
+      const Dashboard = ({ user, onLogout, portal }) => {
+        const { t, lang } = useTranslation();
+        const [stats, setStats] = useState(null);
+        const [requests, setRequests] = useState([]); // Store pending edit requests
+        const [regRequests, setRegRequests] = useState([]); // Store pending REGISTRATION requests (Admin Only)
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState(null);
+        const [viewingId, setViewingId] = useState(null);
+        const [sendingRow, setSendingRow] = useState(null); // Track which row is sending email
+
+        // Edit Modal State
+        const [isEditModalOpen, setEditModalOpen] = useState(false);
+        const [editTarget, setEditTarget] = useState(null); // { responseId, type }
+        const [editReason, setEditReason] = useState("");
+        const [isSubmittingRequest, setSubmittingRequest] = useState(false);
+
+        // --- Filters State ---
+        const [dateFrom, setDateFrom] = useState('');
+        const [dateTo, setDateTo] = useState('');
+        const [filterPosition, setFilterPosition] = useState('All');
+        
+        // Multi-select Filters State
+        const [selectedNames, setSelectedNames] = useState([]);
+        const [selectedBranches, setSelectedBranches] = useState([]);
+        const [selectedGrades, setSelectedGrades] = useState([]);
+        // Admin Only Filter
+        const [selectedTrainers, setSelectedTrainers] = useState([]);
+
+        const loadData = () => {
+           setLoading(true);
+           const promises = [
+              server.getStats(),
+              server.getRequests(portal === 'ADMIN' ? 'ADMIN' : 'TRAINER', user.name)
+           ];
+           
+           if (portal === 'ADMIN') {
+               promises.push(server.getRegistrationRequests());
+           }
+
+           Promise.all(promises)
+           .then((results) => {
+              setStats(results[0]);
+              setRequests(results[1]);
+              if (portal === 'ADMIN') setRegRequests(results[2] || []);
+              setLoading(false);
+           })
+           .catch(err => {
+              setError(err.message);
+              setLoading(false);
+           });
+        };
+
+        useEffect(() => { 
+          // Set Default Dates to Current Month (Timezone Safe)
+          const now = new Date();
+          const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+          const lastDayObj = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of current month
+          const lastDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDayObj.getDate()).padStart(2, '0')}`;
+          
+          setDateFrom(firstDay);
+          setDateTo(lastDay);
+
+          loadData();
+        }, []);
+        
+        const getGradeValue = (g) => ({ "A+": 100, "A": 90, "B": 80, "C": 70, "D": 60 }[g] || 0);
+        const getGradeLetter = (n) => {
+          if (n >= 98) return "A+";
+          if (n >= 90) return "A";
+          if (n >= 80) return "B";
+          if (n >= 70) return "C";
+          return "D";
+        };
+
+        const handleViewReport = async (id) => {
+          if (viewingId) return; // Prevent double click
+          setViewingId(id);
+          try {
+             const result = await server.getReport(id);
+             if (result && result.base64) {
+                 const byteCharacters = atob(result.base64);
+                 const byteNumbers = new Array(byteCharacters.length);
+                 for (let i = 0; i < byteCharacters.length; i++) {
+                     byteNumbers[i] = byteCharacters.charCodeAt(i);
+                 }
+                 const byteArray = new Uint8Array(byteNumbers);
+                 const file = new Blob([byteArray], { type: 'application/pdf' });
+                 const fileURL = URL.createObjectURL(file);
+                 window.open(fileURL, '_blank');
+             } else {
+                 alert("Could not generate preview.");
+             }
+          } catch(e) {
+             alert("Error loading report: " + e.message);
+          } finally {
+             setViewingId(null);
+          }
+        };
+
+        const handleViewCombined = async (id1, id2) => {
+          if (!id1 && !id2) return;
+          const key = `combined-${id1}-${id2}`;
+          if (viewingId === key) return;
+          setViewingId(key);
+          
+          try {
+             const result = await server.getCombinedReport(id1, id2);
+             if (result && result.base64) {
+                 const byteCharacters = atob(result.base64);
+                 const byteNumbers = new Array(byteCharacters.length);
+                 for (let i = 0; i < byteCharacters.length; i++) {
+                     byteNumbers[i] = byteCharacters.charCodeAt(i);
+                 }
+                 const byteArray = new Uint8Array(byteNumbers);
+                 const file = new Blob([byteArray], { type: 'application/pdf' });
+                 const fileURL = URL.createObjectURL(file);
+                 window.open(fileURL, '_blank');
+             } else {
+                 alert("Could not generate combined report.");
+             }
+          } catch(e) {
+             alert("Error loading report: " + e.message);
+          } finally {
+             setViewingId(null);
+          }
+        };
+
+        const handleSendCombinedEmail = async (row) => {
+            if (!row.email) { alert("No email found for trainee."); return; }
+            if (sendingRow) return;
+            
+            setSendingRow(row.traineeId);
+            try {
+               const id1 = row.first?.id;
+               const id2 = row.second?.id;
+               const pdf = await server.getCombinedReport(id1, id2);
+               await server.sendEmail(row.email, user.email, row.traineeName, "Overall Performance", pdf.base64);
+               alert(`Email successfully sent to ${row.traineeName} (CC: ${user.email})`);
+            } catch(e) {
+               alert("Failed to send email: " + e.message);
+            } finally {
+               setSendingRow(null);
+            }
+        };
+
+        const openRequestModal = (responseId, evalType) => {
+           setEditTarget({ responseId, evalType });
+           setEditReason("");
+           setEditModalOpen(true);
+        };
+
+        const submitRequest = async () => {
+           if (!editReason.trim()) { alert("Please provide a reason."); return; }
+           setSubmittingRequest(true);
+           try {
+              await server.requestEdit(editTarget.responseId, user.name, editReason);
+              alert("Request Submitted. Waiting for Admin Approval.");
+              setEditModalOpen(false);
+              loadData(); 
+           } catch(e) {
+              alert(e.message);
+           } finally {
+              setSubmittingRequest(false);
+           }
+        };
+        
+        const processRequest = async (reqId, action) => {
+           if (!confirm(`Confirm ${action}?`)) return;
+           try {
+              await server.processRequest(reqId, action);
+              loadData();
+           } catch(e) { alert(e.message); }
+        };
+
+        const processRegistration = async (reqId, action) => {
+           if (!confirm(`Confirm ${action}?`)) return;
+           try {
+              await server.processRegistration(reqId, action);
+              loadData();
+           } catch(e) { alert(e.message); }
+        };
+        
+        const handleMonthChange = (e) => {
+           const val = e.target.value; // YYYY-MM
+           if (val) {
+               const [y, m] = val.split('-');
+               const start = `${val}-01`;
+               const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
+               const end = `${val}-${String(lastDay).padStart(2, '0')}`;
+               
+               setDateFrom(start);
+               setDateTo(end);
+           }
+        };
+
+        const handleYearChange = (e) => {
+           const val = e.target.value;
+           if (val) {
+               setDateFrom(`${val}-01-01`);
+               setDateTo(`${val}-12-31`);
+           }
+        };
+
+        const filteredFlatList = useMemo(() => {
+           if (!stats || !stats.list) return [];
+           return stats.list.filter(item => {
+             if (portal === 'DASHBOARD') {
+                 if (String(item.trainerName).trim() !== String(user.name).trim()) return false;
+             }
+             if (portal === 'ADMIN' && selectedTrainers.length > 0) {
+                 if (!selectedTrainers.includes(item.trainerName)) return false;
+             }
+
+             let itemDate = '';
+             if(item.date) itemDate = new Date(item.date).toISOString().split('T')[0];
+
+             if (dateFrom && itemDate < dateFrom) return false;
+             if (dateTo && itemDate > dateTo) return false;
+
+             if (filterPosition !== 'All' && item.position !== filterPosition) return false;
+
+             if (selectedNames.length > 0) {
+                const combinedName = `${item.traineeName} (${item.traineeId || 'No ID'})`;
+                if (!selectedNames.includes(combinedName)) return false;
+             }
+             
+             if (selectedBranches.length > 0 && !selectedBranches.includes(item.branch)) return false;
+             if (selectedGrades.length > 0 && !selectedGrades.includes(item.overallGrade)) return false;
+
+             return true;
+          });
+        }, [stats, dateFrom, dateTo, filterPosition, selectedNames, selectedBranches, selectedGrades, selectedTrainers, portal, user]);
+
+        const derivedStats = useMemo(() => {
+           if (!stats) return { total: 0, average: 0, distribution: [], categoryPerformance: [], firstHalf: 0, secondHalf: 0, totalEmployees: 0, totalRequests: 0, memberCount: 0, leaderCount: 0 };
+           const count = filteredFlatList.length;
+           const gradeCounts = { "A+": 0, "A": 0, "B": 0, "C": 0, "D": 0 };
+           const gradeScores = { "A+": 100, "A": 90, "B": 80, "C": 70, "D": 60 };
+           
+           let totalScore = 0;
+           let catSums = {};
+           let catCounts = {};
+
+           filteredFlatList.forEach(item => {
+              const g = item.overallGrade;
+              if(gradeCounts.hasOwnProperty(g)) gradeCounts[g]++;
+              else gradeCounts["D"]++;
+              
+              totalScore += (gradeScores[g] || 0);
+
+              if (item.categoryScores) {
+                  Object.keys(item.categoryScores).forEach(cat => {
+                      if (!catSums[cat]) { catSums[cat] = 0; catCounts[cat] = 0; }
+                      catSums[cat] += item.categoryScores[cat];
+                      catCounts[cat]++;
+                  });
+              }
+           });
+
+           const avg = count ? Math.round(totalScore / count) : 0;
+           const distribution = Object.keys(gradeCounts).map(k => ({ name: k, value: gradeCounts[k] }));
+           
+           const categoryPerformance = Object.keys(catSums).map(k => ({
+              category: k,
+              score: Math.round(catSums[k] / catCounts[k]) || 0
+           }));
+           if (categoryPerformance.length === 0) categoryPerformance.push({ category: "No Data", score: 0 });
+           
+           const uniqueMap = {}; 
+           filteredFlatList.forEach(i => {
+              if (i.traineeId) uniqueMap[i.traineeId] = i.position;
+           });
+           
+           const positions = Object.values(uniqueMap);
+           const memberCount = positions.filter(p => p === 'Team Member' || p === 'Team Member').length;
+           const leaderCount = positions.filter(p => p === 'Team Leader' || p === 'TL').length;
+           const totalEmployees = positions.length;
+           
+           const responseIdsInView = new Set(filteredFlatList.map(r => r.id));
+           const relevantRequests = requests.filter(req => responseIdsInView.has(req.responseId) && req.status === 'Pending').length;
+
+           return {
+              total: count,
+              average: avg,
+              distribution,
+              categoryPerformance,
+              firstHalf: filteredFlatList.filter(x => x.evaluationType === '1st Half').length,
+              secondHalf: filteredFlatList.filter(x => x.evaluationType === '2nd Half').length,
+              totalEmployees,
+              totalRequests: relevantRequests,
+              memberCount,
+              leaderCount
+           };
+        }, [filteredFlatList, stats, requests]);
+
+        const groupedList = useMemo(() => {
+            return Object.values(filteredFlatList.reduce((acc, item) => {
+                const key = item.traineeId || item.traineeName;
+                if (!acc[key]) {
+                    acc[key] = {
+                        traineeId: item.traineeId,
+                        traineeName: item.traineeName,
+                        branch: item.branch,
+                        position: item.position,
+                        trainerName: item.trainerName,
+                        email: item.email, 
+                        first: null,
+                        second: null,
+                        comments: []
+                    };
+                }
+                if (item.evaluationType === '1st Half') acc[key].first = item;
+                if (item.evaluationType === '2nd Half') acc[key].second = item;
+                if (item.comments) acc[key].comments.push(item.comments);
+                if (item.email && !acc[key].email) acc[key].email = item.email;
+                return acc;
+            }, {}));
+        }, [filteredFlatList]);
+        
+        const uniqueOptions = useMemo(() => {
+            let sourceList = stats ? stats.list : [];
+            if (portal === 'DASHBOARD' && user) {
+                 sourceList = sourceList.filter(item => String(item.trainerName).trim() === String(user.name).trim());
+            }
+
+            return {
+                names: Array.from(new Set(sourceList.map(i => `${i.traineeName} (${i.traineeId || 'No ID'})`))).sort(),
+                branches: Array.from(new Set(sourceList.map(i => i.branch).filter(Boolean))).sort(),
+                grades: Array.from(new Set(sourceList.map(i => i.overallGrade).filter(Boolean))).sort(),
+                trainers: Array.from(new Set(sourceList.map(i => i.trainerName).filter(Boolean))).sort()
+            };
+        }, [stats, portal, user]);
+
+
+        if(loading) return <Layout title={t('dashboard')} user={user} onLogout={onLogout}><div className="flex flex-col justify-center items-center p-12"><div className="loader loader-primary mb-2"></div><p className="text-gray-400">{t('loadingData')}</p></div></Layout>;
+        if(error || !stats) return <Layout title={t('dashboard')} user={user} onLogout={onLogout}><div className="p-10 text-center text-red-500">Failed to load dashboard data. <br/>{error}</div></Layout>;
+        
+        const COLORS = ['#ea580c', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+        
+        const pendingRequests = requests.filter(r => r.status === 'Pending');
+
+        return (
+          <Layout title={portal === 'ADMIN' ? t('adminPortal') : t('dashboard')} user={user} onLogout={onLogout}>
+            
+            {isEditModalOpen && (
+               <Modal title={t('reqTitle')} onClose={() => setEditModalOpen(false)}>
+                  <p className="text-sm text-gray-500 mb-4">{t('reqDesc')}</p>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{t('reasonDel')}</label>
+                  <textarea 
+                     className="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none" 
+                     rows="3"
+                     value={editReason}
+                     onChange={e => setEditReason(e.target.value)}
+                  ></textarea>
+                  <Button onClick={submitRequest} isLoading={isSubmittingRequest} className="mt-4">{t('submitReq')}</Button>
+               </Modal>
+            )}
+
+            <div className="mb-6 print:hidden">
+              <div className={`p-4 rounded-xl flex items-center gap-4 shadow-sm border ${portal === 'ADMIN' ? 'bg-zinc-800 text-white border-zinc-700' : 'bg-white text-slate-800 border-zinc-200'}`}>
+                 <div className={`p-3 rounded-full ${portal === 'ADMIN' ? 'bg-white/10' : 'bg-orange-50 text-orange-600'}`}>
+                    <Icon name={portal === 'ADMIN' ? 'shield-check' : 'user-check'} size={24} />
+                 </div>
+                 <div>
+                    <h2 className="text-lg font-bold">{portal === 'ADMIN' ? t('adminOverview') : t('myTracker')}</h2>
+                    <p className={`text-sm ${portal === 'ADMIN' ? 'text-slate-300' : 'text-slate-500'}`}>
+                       {portal === 'ADMIN' 
+                         ? t('viewingAdmin') 
+                         : t('viewingTrainer') + user.name}
+                    </p>
+                 </div>
+              </div>
+            </div>
+
+            {portal === 'ADMIN' && (
+              <div className="grid md:grid-cols-2 gap-6 mb-6">
+                
+                <Card title={`${t('pendingReg')} (${regRequests.length})`} className="border-blue-200 print:hidden h-64 overflow-y-auto">
+                   {regRequests.length === 0 ? (
+                      <div className="text-center text-gray-400 py-10 text-sm">{t('noData')}</div>
+                   ) : (
+                      <table className="w-full text-sm">
+                        <thead className="bg-blue-50 text-blue-800 sticky top-0">
+                           <tr>
+                              <th className="p-2 text-left">{t('fullName')} / ID</th>
+                              <th className="p-2 text-left">{t('position')}</th>
+                              <th className="p-2 text-right"></th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {regRequests.map(req => (
+                              <tr key={req.reqId} className="border-b last:border-0 hover:bg-zinc-50">
+                                 <td className="p-2">
+                                    <div className="font-medium">{req.name}</div>
+                                    <div className="text-xs text-slate-500">ID: {req.idNumber}</div>
+                                    <div className="text-[10px] text-gray-400">{req.email}</div>
+                                    {req.imageLink && <div className="mt-1"><a href={req.imageLink} target="_blank" className="text-xs text-blue-600 underline">View Photo</a></div>}
+                                 </td>
+                                 <td className="p-2 text-xs">{req.position} <br/> <span className="text-gray-400">{req.branch}</span></td>
+                                 <td className="p-2 text-right flex justify-end gap-1">
+                                    <button onClick={() => processRegistration(req.reqId, 'Approved')} className="p-1 px-2 bg-green-600 text-white rounded text-xs hover:bg-green-700">{t('allow')}</button>
+                                    <button onClick={() => processRegistration(req.reqId, 'Rejected')} className="p-1 px-2 bg-red-600 text-white rounded text-xs hover:bg-red-700">{t('deny')}</button>
+                                 </td>
+                              </tr>
+                           ))}
+                        </tbody>
+                      </table>
+                   )}
+                </Card>
+
+                <Card title={`${t('pendingEdit')} (${pendingRequests.length})`} className="border-orange-200 print:hidden h-64 overflow-y-auto">
+                   {pendingRequests.length === 0 ? (
+                      <div className="text-center text-gray-400 py-10 text-sm">{t('noData')}</div>
+                   ) : (
+                      <table className="w-full text-sm">
+                        <thead className="bg-orange-50 text-orange-800 sticky top-0">
+                           <tr>
+                              <th className="p-2 text-left">{t('trainerName')}</th>
+                              <th className="p-2 text-left">{t('traineeName')}</th>
+                              <th className="p-2 text-right"></th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {pendingRequests.map(req => (
+                              <tr key={req.requestId} className="border-b last:border-0 hover:bg-zinc-50">
+                                 <td className="p-2 font-medium">{req.trainerName}</td>
+                                 <td className="p-2">
+                                    <div className="font-medium">{req.traineeName}</div>
+                                    <div className="text-xs text-slate-500">{req.evalType}</div>
+                                    <div className="text-[10px] text-slate-400 italic">"{req.reason}"</div>
+                                 </td>
+                                 <td className="p-2 text-right flex justify-end gap-1">
+                                    <button onClick={() => processRequest(req.requestId, 'Approved')} className="p-1 px-2 bg-green-600 text-white rounded text-xs hover:bg-green-700">{t('approved')}</button>
+                                    <button onClick={() => processRequest(req.requestId, 'Rejected')} className="p-1 px-2 bg-red-600 text-white rounded text-xs hover:bg-red-700">{t('rejected')}</button>
+                                 </td>
+                              </tr>
+                           ))}
+                        </tbody>
+                      </table>
+                   )}
+                </Card>
+              </div>
+            )}
+
+            {portal === 'ADMIN' && (
+              <div className="mb-6">
+                <Card title={t('trainerOverview')} className="overflow-x-auto">
+                   <table className="w-full text-sm text-left">
+                      <thead className="bg-zinc-50 text-slate-600 sticky top-0 font-bold text-xs uppercase">
+                         <tr>
+                            <th className="p-3 text-left">{t('trainerName')}</th>
+                            <th className="p-3 text-center">{t('colTotalTM')}</th>
+                            <th className="p-3 text-center">{t('colTotalEval')}</th>
+                            <th className="p-3 text-center">{t('colBranches')}</th>
+                            <th className="p-3 text-center">{t('colMonthlyComp')}</th>
+                            <th className="p-3 text-center">{t('col1stHalf')}</th>
+                            <th className="p-3 text-center">{t('colDays')}</th>
+                         </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100">
+                         {stats.trainerOverview && stats.trainerOverview.map((row, i) => (
+                           <tr key={i} className="hover:bg-zinc-50 transition-colors">
+                              <td className="p-3 font-medium text-slate-800">{row.name}</td>
+                              <td className="p-3 text-center font-mono text-slate-500">{row.totalTM}</td>
+                              <td className="p-3 text-center font-bold text-orange-600">{row.totalEvaluations}</td>
+                              <td className="p-3 text-center text-slate-600">{row.totalBranches}</td>
+                              <td className="p-3 text-center font-medium text-green-600">{row.completedMonthly}</td>
+                              <td className="p-3 text-center text-slate-600">{row.totalFirstHalf}</td>
+                              <td className="p-3 text-center text-slate-600">{row.totalDays}</td>
+                           </tr>
+                         ))}
+                         {(!stats.trainerOverview || stats.trainerOverview.length === 0) && (
+                            <tr><td colSpan="7" className="p-4 text-center text-gray-400">No trainer data available</td></tr>
+                         )}
+                      </tbody>
+                   </table>
+                </Card>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              {[
+                { label: t('kpiEmployees'), val: derivedStats.totalEmployees, color: 'border-orange-500', icon: 'users', bg: 'bg-orange-50', text: 'text-orange-600' },
+                { label: t('kpiAvg'), val: derivedStats.average + '%', color: 'border-emerald-500', icon: 'star', bg: 'bg-emerald-50', text: 'text-emerald-600' },
+                { label: t('kpiPos'), val: `${derivedStats.memberCount} | ${derivedStats.leaderCount}`, color: 'border-blue-500', icon: 'briefcase', bg: 'bg-blue-50', text: 'text-blue-600' },
+                { label: t('kpiHalves'), val: `${derivedStats.firstHalf} / ${derivedStats.secondHalf}`, color: 'border-purple-500', icon: 'trending-up', bg: 'bg-purple-50', text: 'text-purple-600' },
+              ].map((k, i) => (
+                <div key={i} className={`bg-white p-4 rounded-xl shadow-sm border-l-4 ${k.color} flex items-center justify-between`}>
+                  <div>
+                    <p className="text-slate-500 text-xs font-bold uppercase mb-1">{k.label}</p>
+                    <p className="text-2xl font-bold text-slate-800">{k.val}</p>
+                  </div>
+                  <div className={`p-3 rounded-full ${k.bg} ${k.text}`}><Icon name={k.icon} /></div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-6 mb-6">
+              <Card title={t('gradeDist')} className="lg:col-span-1 min-h-[400px]">
+                {canRenderCharts ? (
+                  <div className="h-48 w-full mb-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={derivedStats.distribution}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                        <YAxis tickLine={false} axisLine={false} />
+                        <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '8px'}} />
+                        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                          {derivedStats.distribution.map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : <div className="h-48 flex items-center justify-center text-gray-400">Charts Loading...</div>}
+                <div className="border-t pt-4">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">{t('countBreakdown')}</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {derivedStats.distribution.map(d => (
+                       <div key={d.name} className="flex justify-between p-2 bg-zinc-50 rounded">
+                         <span className="font-semibold">{d.name}</span>
+                         <span className="text-orange-600 font-bold">{d.value}</span>
+                       </div>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+
+              <Card title={t('catPerf')} className="lg:col-span-2 min-h-[400px]">
+                <div className="flex flex-col md:flex-row h-full gap-4">
+                   <div className="flex-1 h-64 md:h-auto">
+                      {canRenderCharts ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={derivedStats.categoryPerformance}>
+                            <PolarGrid />
+                            <PolarAngleAxis dataKey="category" />
+                            <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                            <Radar name="Score" dataKey="score" stroke="#ea580c" fill="#ea580c" fillOpacity={0.6} />
+                            <Tooltip />
+                          </RadarChart>
+                        </ResponsiveContainer>
+                      ) : <div className="h-full flex items-center justify-center text-gray-400">Charts Loading...</div>}
+                   </div>
+                   <div className="w-full md:w-1/3">
+                      <table className="w-full text-sm">
+                        <thead className="bg-zinc-50 text-left text-gray-500">
+                          <tr><th className="p-2">Category</th><th className="p-2">Avg</th></tr>
+                        </thead>
+                        <tbody>
+                           {derivedStats.categoryPerformance.map((c, i) => (
+                             <tr key={i} className="border-b last:border-0">
+                               <td className="p-2">{c.category}</td>
+                               <td className="p-2 font-bold text-orange-700">{c.score}%</td>
+                             </tr>
+                           ))}
+                        </tbody>
+                      </table>
+                   </div>
+                </div>
+              </Card>
+            </div>
+
+            <Card className="mb-6 bg-zinc-50 border-zinc-200 print:hidden overflow-visible">
+               <div className="flex flex-col gap-4">
+                 <div className="flex gap-2 p-1 bg-zinc-100 rounded-lg self-start">
+                    {['All', 'Team Member', 'Team Leader'].map(pos => (
+                      <button 
+                        key={pos} 
+                        onClick={() => setFilterPosition(pos)} 
+                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${filterPosition === pos ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >
+                        {pos === 'All' ? t('all') : (pos === 'Team Member' ? t('teamMember') : t('teamLeader'))}
+                      </button>
+                    ))}
+                 </div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">{t('quickSelect')}</label>
+                      <div className="flex gap-2">
+                        <input type="month" onChange={handleMonthChange} className="w-2/3 text-sm p-2 border rounded focus:ring-2 focus:ring-orange-500 outline-none" title="Select Month" />
+                        <select onChange={handleYearChange} className="w-1/3 text-sm p-2 border rounded focus:ring-2 focus:ring-orange-500 outline-none bg-white" title="Select Full Year">
+                            <option value="">{t('year')}</option>
+                            {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">{t('dateRange')}</label>
+                      <div className="flex gap-2">
+                        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full text-sm p-2 border rounded focus:ring-2 focus:ring-orange-500 outline-none" />
+                        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full text-sm p-2 border rounded focus:ring-2 focus:ring-orange-500 outline-none" />
+                      </div>
+                    </div>
+                    {portal === 'ADMIN' && (
+                       <div><MultiSelect label={t('trainerName')} options={uniqueOptions.trainers} selected={selectedTrainers} onChange={setSelectedTrainers} /></div>
+                    )}
+                    <div><MultiSelect label={t('traineeName')} options={uniqueOptions.names} selected={selectedNames} onChange={setSelectedNames} /></div>
+                    <div><MultiSelect label={t('branch')} options={uniqueOptions.branches} selected={selectedBranches} onChange={setSelectedBranches} /></div>
+                    <div><MultiSelect label={t('grade')} options={uniqueOptions.grades} selected={selectedGrades} onChange={setSelectedGrades} /></div>
+                 </div>
+               </div>
+            </Card>
+
+            <Card title="Evaluations List" className="overflow-hidden flex flex-col print:hidden">
+              <div className="mb-4 flex justify-between items-center print:hidden">
+                <div className="text-sm text-slate-500">{t('showing')} {groupedList.length} {t('records')}</div>
+                <div className="flex gap-2">
+                    <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700">
+                       <Icon name="printer" size={16} /> Print
+                    </button>
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-zinc-50 text-slate-500 font-medium">
+                    <tr>
+                      <th className="px-4 py-3 w-10">{t('sn')}</th>
+                      <th className="px-4 py-3 w-1/6">{t('trainerName')}</th>
+                      <th className="px-4 py-3 w-20">ID</th>
+                      <th className="px-4 py-3 w-1/5">{t('traineeName')}</th>
+                      <th className="px-4 py-3 w-1/6">{t('branch')}</th>
+                      <th className="px-4 py-3 w-1/6">{t('firstHalf')}</th>
+                      <th className="px-4 py-3 w-1/6">{t('secondHalf')}</th>
+                      <th className="px-4 py-3 w-1/6">{t('overallRating')}</th>
+                      <th className="px-4 py-3 w-16">Email</th>
+                      <th className="px-4 py-3 w-16">{t('requests')}</th>
+                      <th className="px-4 py-3 w-1/6">{t('comments')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {groupedList.length === 0 ? (
+                      <tr><td colSpan="11" className="px-4 py-8 text-center text-gray-500">{t('noData')}</td></tr>
+                    ) : (
+                      groupedList.map((r, i) => {
+                         const s1 = r.first ? getGradeValue(r.first.overallGrade) : 0;
+                         const s2 = r.second ? getGradeValue(r.second.overallGrade) : 0;
+                         let count = (r.first ? 1 : 0) + (r.second ? 1 : 0);
+                         let avg = count ? (s1 + s2) / count : 0;
+                         let overall = count ? getGradeLetter(avg) : "-";
+
+                         const reqFirst = r.first ? requests.find(req => req.responseId === r.first.id && req.status === 'Pending') : null;
+                         const reqSecond = r.second ? requests.find(req => req.responseId === r.second.id && req.status === 'Pending') : null;
+                         
+                         const rowRequestsCount = (reqFirst ? 1 : 0) + (reqSecond ? 1 : 0);
+
+                         return (
+                            <tr key={i} className="hover:bg-zinc-50 transition-colors">
+                              <td className="px-4 py-3 text-slate-500">{i + 1}</td>
+                              <td className="px-4 py-3 text-slate-700 font-medium">{r.trainerName}</td>
+                              <td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.traineeId || '-'}</td>
+                              <td className="px-4 py-3">
+                                 <div className="font-medium text-slate-900">{r.traineeName}</div>
+                                 <div className="text-xs text-slate-500">{r.position}</div>
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 font-medium">{r.branch}</td>
+                              <td className="px-4 py-3">
+                                 {r.first ? (
+                                   <div className="flex items-center gap-2">
+                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                                        r.first.overallGrade.startsWith('A') ? 'bg-green-100 text-green-700' :
+                                        r.first.overallGrade === 'B' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                                     }`}>{r.first.overallGrade}</div>
+                                     <div className="print:hidden">
+                                        <div className="flex gap-2 items-center mt-0.5">
+                                          {r.first.id && (
+                                            <button onClick={() => handleViewReport(r.first.id)} disabled={viewingId === r.first.id} className="text-orange-600 hover:underline text-xs flex items-center gap-1">
+                                               {viewingId === r.first.id ? "..." : t('viewPdf')}
+                                            </button>
+                                          )}
+                                          
+                                          {portal === 'ADMIN' ? (
+                                              reqFirst ? (
+                                                <div className="flex gap-1 ml-1">
+                                                  <button onClick={() => processRequest(reqFirst.requestId, 'Approved')} className="p-0.5 bg-green-100 text-green-700 rounded hover:bg-green-200" title="Approve Deletion"><Icon name="check" size={12}/></button>
+                                                  <button onClick={() => processRequest(reqFirst.requestId, 'Rejected')} className="p-0.5 bg-red-100 text-red-700 rounded hover:bg-red-200" title="Reject Deletion"><Icon name="x" size={12}/></button>
+                                                </div>
+                                              ) : null
+                                           ) : (
+                                              reqFirst ? (
+                                                <span className="text-[9px] bg-yellow-100 text-yellow-700 px-1 rounded border border-yellow-200 font-medium ml-1">Pending</span>
+                                              ) : (
+                                                <button onClick={() => openRequestModal(r.first.id, '1st Half')} className="text-gray-400 hover:text-orange-600 flex items-center ml-1" title="Request Edit">
+                                                  <Icon name="pencil" size={12} />
+                                                </button>
+                                              )
+                                           )}
+
+                                        </div>
+                                     </div>
+                                   </div>
+                                 ) : <span className="text-slate-400 text-xs">-</span>}
+                              </td>
+                              <td className="px-4 py-3">
+                                 {r.second ? (
+                                   <div className="flex items-center gap-2">
+                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                                        r.second.overallGrade.startsWith('A') ? 'bg-green-100 text-green-700' :
+                                        r.second.overallGrade === 'B' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                                     }`}>{r.second.overallGrade}</div>
+                                     <div className="print:hidden">
+                                        <div className="flex gap-2 items-center mt-0.5">
+                                          {r.second.id && (
+                                              <button onClick={() => handleViewReport(r.second.id)} disabled={viewingId === r.second.id} className="text-orange-600 hover:underline text-xs flex items-center gap-1">
+                                                {viewingId === r.second.id ? "..." : t('viewPdf')}
+                                              </button>
+                                          )}
+                                          
+                                          {portal === 'ADMIN' ? (
+                                              reqSecond ? (
+                                                <div className="flex gap-1 ml-1">
+                                                  <button onClick={() => processRequest(reqSecond.requestId, 'Approved')} className="p-0.5 bg-green-100 text-green-700 rounded hover:bg-green-200" title="Approve Deletion"><Icon name="check" size={12}/></button>
+                                                  <button onClick={() => processRequest(reqSecond.requestId, 'Rejected')} className="p-0.5 bg-red-100 text-red-700 rounded hover:bg-red-200" title="Reject Deletion"><Icon name="x" size={12}/></button>
+                                                </div>
+                                              ) : null
+                                           ) : (
+                                              reqSecond ? (
+                                                <span className="text-[9px] bg-yellow-100 text-yellow-700 px-1 rounded border border-yellow-200 font-medium ml-1">Pending</span>
+                                              ) : (
+                                                <button onClick={() => openRequestModal(r.second.id, '2nd Half')} className="text-gray-400 hover:text-orange-600 flex items-center ml-1" title="Request Edit">
+                                                  <Icon name="pencil" size={12} />
+                                                </button>
+                                              )
+                                           )}
+
+                                        </div>
+                                     </div>
+                                   </div>
+                                 ) : <span className="text-slate-400 text-xs">-</span>}
+                              </td>
+                              <td className="px-4 py-3">
+                                 <div className="flex items-center gap-2">
+                                     {overall !== "-" ? (
+                                         <span className={`px-3 py-1 rounded font-bold text-sm ${
+                                            overall.startsWith('A') ? 'bg-slate-800 text-white' :
+                                            overall === 'B' ? 'bg-slate-600 text-white' : 'bg-slate-400 text-white'
+                                         }`}>
+                                           {overall}
+                                         </span>
+                                     ) : <span className="text-slate-400">-</span>}
+                                     
+                                     {(r.first || r.second) && (
+                                        <button 
+                                          onClick={() => handleViewCombined(r.first?.id, r.second?.id)} 
+                                          className={`print:hidden p-1.5 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors ${viewingId === `combined-${r.first?.id}-${r.second?.id}` ? 'opacity-50' : ''}`}
+                                          disabled={!!viewingId}
+                                          title="View Combined Report"
+                                        >
+                                          {viewingId === `combined-${r.first?.id}-${r.second?.id}` 
+                                            ? <div className="loader loader-primary w-3 h-3 border-2"></div> 
+                                            : <Icon name="file-text" size={16} />
+                                          }
+                                        </button>
+                                     )}
+                                 </div>
+                              </td>
+
+                              <td className="px-4 py-3 text-center">
+                                 {r.email ? (
+                                    <button 
+                                       onClick={() => handleSendCombinedEmail(r)} 
+                                       disabled={!!sendingRow}
+                                       className={`p-1.5 rounded text-white transition-colors ${sendingRow === r.traineeId ? 'bg-gray-400' : 'bg-emerald-500 hover:bg-emerald-600'}`}
+                                       title="Send Overall Rating to Employee"
+                                    >
+                                       {sendingRow === r.traineeId ? <div className="loader w-3 h-3"></div> : <Icon name="mail" size={14} />}
+                                    </button>
+                                 ) : <span className="text-slate-300 text-xs">No Email</span>}
+                              </td>
+                              
+                              <td className="px-4 py-3 text-center">
+                                {rowRequestsCount > 0 ? (
+                                   <span className="bg-orange-100 text-orange-700 font-bold px-2 py-1 rounded-full text-xs">{rowRequestsCount}</span>
+                                ) : <span className="text-slate-300">-</span>}
+                              </td>
+
+                              <td className="px-4 py-3 text-xs text-slate-600">
+                                 <div className="max-w-xs truncate" title={r.comments.join("; ")}>{r.comments.join("; ") || "-"}</div>
+                              </td>
+                            </tr>
+                         );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+          </Layout>
+        );
+      };
+
+      // --- Main ---
+      const App = () => {
+        const [page, setPage] = useState('LANDING'); 
+        const [portal, setPortal] = useState(null);
+        const [user, setUser] = useState(null);
+        const [lang, setLang] = useState('en'); 
+
+        const goLogin = (p) => { setPortal(p); setPage('LOGIN'); };
+        const goApp = (u) => { setUser(u); setPage('APP'); };
+        
+        const doLogout = async () => {
+          await server.logout(user);
+          setUser(null);
+          setPortal(null);
+          setPage('LANDING');
+        };
+
+        const t = (key) => translations[lang][key] || key;
+        const ctxVal = { lang, setLang, t };
+
+        let content;
+        if(page === 'LANDING') content = <Landing onSelect={goLogin} />;
+        else if(page === 'REGISTER') content = <Register onBack={() => setPage('LOGIN')} />;
+        else if(page === 'LOGIN') content = <Login portal={portal} onLogin={goApp} onBack={() => setPage('LANDING')} onRegister={() => setPage('REGISTER')} />;
+        else if(page === 'APP') content = portal === 'EVALUATION' ? <EvaluationForm user={user} onLogout={doLogout} /> : <Dashboard user={user} onLogout={doLogout} portal={portal} />;
+
+        return (
+          <LanguageContext.Provider value={ctxVal}>
+            {content}
+          </LanguageContext.Provider>
+        );
+      };
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
