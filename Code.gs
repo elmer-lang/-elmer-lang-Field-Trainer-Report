@@ -22,6 +22,50 @@ function safeString(val) {
   return String(val).trim();
 }
 
+// --- IMAGE HANDLING (THE FIX) ---
+function saveImageToDrive(base64, fileName, folderId) {
+  try {
+    let folder;
+    try {
+      folder = DriveApp.getFolderById(folderId);
+    } catch(e) {
+      // Fallback if specific folder fails, try to find/create in Root
+      const root = DriveApp.getRootFolder();
+      const fallback = root.getFoldersByName("User_Images");
+      if (fallback.hasNext()) {
+        folder = fallback.next();
+      } else {
+        folder = root.createFolder("User_Images");
+      }
+    }
+
+    // Extract content type and bytes
+    const contentTypeMatch = base64.match(/^data:(image\/\w+);base64,/);
+    if (!contentTypeMatch) throw new Error("Invalid image data");
+    
+    const contentType = contentTypeMatch[1];
+    const bytes = Utilities.base64Decode(
+      base64.replace(/^data:image\/\w+;base64,/, '')
+    );
+
+    const blob = Utilities.newBlob(bytes, contentType, fileName);
+    const file = folder.createFile(blob);
+
+    // CRITICAL: Set permission to ANYONE_WITH_LINK so it renders in <img> tags
+    try {
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (permErr) {
+      console.warn("Could not set public sharing (might be restricted by domain): " + permErr.message);
+    }
+
+    // FIX: Use thumbnail link instead of uc?id= for better display reliability in browsers
+    // sz=w1000 requests a thumbnail up to 1000px wide. This bypasses 3rd party cookie blocking issues.
+    return `https://drive.google.com/thumbnail?sz=w1000&id=${file.getId()}`;
+  } catch (e) {
+    throw new Error("Image save failed: " + e.message);
+  }
+}
+
 /**
  * 🔴 IMPORTANT: RUN THIS FUNCTION FIRST TO FIX PERMISSION ERRORS 🔴
  */
@@ -37,39 +81,15 @@ function _1_Run_This_First_To_Authorize() {
   }
   
   // 2. Drive Scope (Read/Write)
-  // We explicitly create a file in the TARGET folder to ensure the 'https://www.googleapis.com/auth/drive' scope is fully active for this folder.
   try {
     const targetFolder = DriveApp.getFolderById(TARGET_IMAGE_FOLDER_ID);
     const tempFile = targetFolder.createFile("Auth_Check_Delete_Me.txt", "This file checks for write permissions.");
     tempFile.setTrashed(true); // Delete immediately
-    console.log("✅ Drive Permission Granted. Write access confirmed for folder: " + targetFolder.getName());
+    console.log("✅ Drive Permission Granted. Write access confirmed.");
   } catch (e) {
     console.error("❌ Drive Permission Error: " + e.message);
-    console.log("Attempting fallback check on Root folder...");
-    try {
-       const root = DriveApp.getRootFolder();
-       root.createFile("Temp_Root_Check.txt", "Fallback").setTrashed(true);
-       console.log("✅ Root access OK, but specific folder access failed. Check folder ID and sharing settings.");
-    } catch(e2) {
-       console.error("❌ Fatal Drive Error: " + e2.message);
-    }
   }
   
-  // 3. Spreadsheet Scope
-  try {
-    const temp = SpreadsheetApp.create("Temp_Auth_Check_Delete_Me");
-    const tempId = temp.getId();
-    console.log("✅ Spreadsheet Permission Granted.");
-    try {
-      DriveApp.getFileById(tempId).setTrashed(true);
-    } catch(cleanupError) {
-      console.log("⚠️ Temp file cleanup skipped: " + cleanupError.message);
-    }
-  } catch(e) {
-    console.error("❌ Spreadsheet Error: " + e.message);
-  }
-
-  console.log("--- SUCCESS: ALL PERMISSIONS GRANTED. YOU MAY NOW DEPLOY. ---");
   return "SUCCESS: Permissions granted. Please Redeploy the app.";
 }
 
@@ -86,13 +106,7 @@ function doGet(e) {
 
 function resetSystem() {
   PropertiesService.getScriptProperties().deleteAllProperties();
-  console.log("System Reset Complete.");
   return "System Reset Complete. Please refresh the web app.";
-}
-
-function setupDrive() {
-  const root = getFolderByName(ROOT_FOLDER_NAME) || DriveApp.createFolder(ROOT_FOLDER_NAME);
-  console.log("Root folder checked/created: " + root.getUrl());
 }
 
 // --- Initialization ---
@@ -172,7 +186,7 @@ function apiLogout(user) {
   return true;
 }
 
-// --- API: Profile Image Update (Robust Fallback) ---
+// --- API: Profile Image Update ---
 function apiUpdateUserImage(userId, base64Data) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName("Users");
@@ -189,40 +203,8 @@ function apiUpdateUserImage(userId, base64Data) {
   
   if (rowIndex === -1) throw new Error("User not found.");
 
-  // Decode Data
-  const split = base64Data.split(',');
-  let type = "image/png";
-  if (split[0].includes("jpeg")) type = "image/jpeg";
-  const bytes = Utilities.base64Decode(split[1]);
-  const blob = Utilities.newBlob(bytes, type, `profile_${userId}_${Date.now()}`);
-
-  let file;
-  
-  // Strategy: Try Target Folder -> Fail -> Try Fallback "User_Images" in Root -> Fail
-  try {
-    const folder = DriveApp.getFolderById(TARGET_IMAGE_FOLDER_ID);
-    file = folder.createFile(blob);
-  } catch (e) {
-    console.warn("Primary folder save failed (" + e.message + "). Attempting fallback to 'User_Images'.");
-    try {
-      const root = DriveApp.getRootFolder();
-      const fallbackFolder = getFolderInParent(root, "User_Images") || root.createFolder("User_Images");
-      file = fallbackFolder.createFile(blob);
-    } catch (e2) {
-      // If even root fallback fails, it's definitely a permission scope issue
-      throw new Error("Could not save image to Drive. Please ensure the Admin has run the Authorization function. Details: " + e2.message);
-    }
-  }
-  
-  // Attempt to set public sharing
-  try { 
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); 
-  } catch(e) {
-    console.warn("Could not set public permission on image: " + e.message);
-  }
-  
-  const fileId = file.getId();
-  const publicUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+  // Use the safe save function
+  const publicUrl = saveImageToDrive(base64Data, `profile_${userId}_${Date.now()}.jpg`, TARGET_IMAGE_FOLDER_ID);
   
   // Update Sheet (Image Link is Column 7 -> Index 6, so column number 7)
   sheet.getRange(rowIndex, 7).setValue(publicUrl);
@@ -258,15 +240,7 @@ function apiRequestPasswordReset(idNumber) {
     MailApp.sendEmail({
       to: userEmail,
       subject: "Password Reset Verification - Field Training Portal",
-      htmlBody: `
-        <div style="font-family: sans-serif; color: #333;">
-          <h3>Password Reset Request</h3>
-          <p>Hello ${userName},</p>
-          <p>We received a request to reset your password. Use the following code to proceed:</p>
-          <h2 style="background: #f1f5f9; padding: 15px; letter-spacing: 5px; text-align: center; border-radius: 8px;">${otp}</h2>
-          <p style="color: #666; font-size: 12px;">This code expires in 10 minutes.</p>
-        </div>
-      `
+      htmlBody: `<h3>Password Reset</h3><p>Your code is: <b>${otp}</b></p>`
     });
   } catch(e) {
     throw new Error("Failed to send email. Please try again later.");
@@ -309,10 +283,6 @@ function apiResetPassword(idNumber, otp, newPassword) {
   return true;
 }
 
-function apiRegister(data) {
-   throw new Error("Direct registration disabled. Use approval flow.");
-}
-
 function apiSubmitRegistration(data) {
   const ss = getSpreadsheet();
   const uSheet = ss.getSheetByName("Users");
@@ -323,11 +293,6 @@ function apiSubmitRegistration(data) {
     if(safeString(uData[i][0]) === safeString(data.idNumber)) throw new Error("ID Number already registered.");
   }
 
-  const rData = rSheet.getDataRange().getValues();
-  for(let i=1; i<rData.length; i++) {
-    if(safeString(rData[i][2]) === safeString(data.idNumber) && safeString(rData[i][7]) === "Pending") throw new Error("Registration already pending for this ID.");
-  }
-  
   const reqId = Utilities.getUuid();
   const ts = new Date().toISOString();
   rSheet.appendRow([reqId, data.name, data.idNumber, data.password, data.position, data.branch, data.email, "Pending", ts]);
@@ -335,17 +300,8 @@ function apiSubmitRegistration(data) {
   try {
     MailApp.sendEmail({
       to: "elmer@bon.com.sa",
-      subject: "New Registration Request - Field Training Portal",
-      htmlBody: `
-        <h3>New User Registration Request</h3>
-        <p>A new user has requested access.</p>
-        <ul>
-          <li><strong>Name:</strong> ${data.name}</li>
-          <li><strong>ID Number:</strong> ${data.idNumber}</li>
-          <li><strong>Position:</strong> ${data.position}</li>
-          <li><strong>Email:</strong> ${data.email}</li>
-        </ul>
-      `
+      subject: "New Registration Request",
+      htmlBody: `<p>New user registration: ${data.name} (${data.idNumber})</p>`
     });
   } catch (e) {
     console.error("Failed to send Admin notification email: " + e.message);
@@ -396,22 +352,9 @@ function apiProcessRegistration(reqId, action) {
      const branch = rowData[5];
      const email = rowData[6];
      const role = (safeString(pos).toUpperCase() === 'ADMIN') ? 'ADMIN' : 'TRAINER';
-     
      const image = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
      
      uSheet.appendRow([id, name, pass, pos, branch, role, image, email]);
-
-     if (email && String(email).includes("@")) {
-       try {
-         MailApp.sendEmail({
-           to: email,
-           subject: "Account Approved - Field Training Portal",
-           htmlBody: `<h3>Welcome, ${name}!</h3><p>Your account is approved.</p>`
-         });
-       } catch (e) {
-         console.error("Failed to send Applicant notification email: " + e.message);
-       }
-     }
   }
   
   return true;
@@ -446,12 +389,7 @@ function apiGetQuestions() {
   const sheet = ss.getSheetByName("Config");
   const values = sheet.getDataRange().getValues();
   
-  if (values.length <= 1) {
-    return [
-      {id: "q1", category: "Knowledge", text: "Product Knowledge", type: "radio", options: ["A+", "A", "B", "C", "D"], targetPosition: "Both"},
-      {id: "q2", category: "Skills", text: "Communication Skills", type: "radio", options: ["A+", "A", "B", "C", "D"], targetPosition: "Both"}
-    ];
-  }
+  if (values.length <= 1) return [];
   
   return values.slice(1).map(row => ({
     id: safeString(row[0]), category: safeString(row[1]), text: safeString(row[2]), 
@@ -509,6 +447,7 @@ function apiCheckPreviousEvaluation(id) {
   return result.found ? result : null;
 }
 
+// --- API: Submit ---
 function apiSubmitEvaluation(form) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName("Responses");
@@ -564,7 +503,9 @@ function apiSubmitEvaluation(form) {
   const requiredSize = Math.max(updatedLastCol, 12);
   const rowData = new Array(requiredSize).fill("");
 
-  rowData[0] = Utilities.getUuid();
+  const responseId = Utilities.getUuid(); // GENERATE ID
+
+  rowData[0] = responseId;
   rowData[1] = form.traineeId;
   rowData[2] = form.traineeName;
   rowData[3] = form.evaluationType;
@@ -586,29 +527,45 @@ function apiSubmitEvaluation(form) {
   });
 
   sheet.appendRow(rowData);
-  return pdfResult;
+  
+  // Return the new ID + PDF result to the frontend
+  return { ...pdfResult, id: responseId };
 }
 
-function apiSendEvaluationEmail(traineeEmail, trainerEmail, traineeName, evalType, pdfBase64) {
-  if (!traineeEmail || !String(traineeEmail).includes("@")) throw new Error("Invalid trainee email address.");
-  
-  const adminEmail = "elmer@bon.com.sa";
-  let ccList = [adminEmail];
-  if (trainerEmail && String(trainerEmail).includes("@") && String(trainerEmail).toLowerCase() !== String(adminEmail).toLowerCase()) {
-     ccList.push(trainerEmail);
-  }
-  
-  const subject = `Evaluation Report: ${traineeName} - ${evalType}`;
-  const htmlBody = `
-    <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px;">
-      <h2 style="color: #ea580c; margin-top: 0;">Evaluation Completed</h2>
-      <p>The performance evaluation for <strong>${traineeName}</strong> has been successfully submitted.</p>
-      <p>A PDF copy is attached.</p>
-    </div>
-  `;
-  
+// --- API: Send Email (CRITICAL FIX) ---
+// Returns a result object { success: boolean, message: string } instead of throwing errors.
+function apiSendEvaluationEmail(traineeEmail, trainerEmail, traineeName, evalType, responseId) {
   try {
-    const blob = Utilities.newBlob(Utilities.base64Decode(pdfBase64), "application/pdf", `${traineeName.replace(/\s+/g, '_')}-${evalType.replace(/\s+/g, '_')}.pdf`);
+    if (!traineeEmail || !String(traineeEmail).includes("@")) {
+      return { success: false, message: "Invalid trainee email address." };
+    }
+    
+    // 1. Fetch Report Data using ID
+    const reportData = apiGetReport(responseId);
+    if (!reportData || !reportData.base64) {
+      return { success: false, message: "Could not generate report for email." };
+    }
+
+    // FIX: Clean filename to prevent MailApp crashes with Arabic/Special characters
+    const safeName = String(traineeName).replace(/[^a-zA-Z0-9]/g, '_');
+    
+    // 2. Convert to Blob
+    const blob = Utilities.newBlob(Utilities.base64Decode(reportData.base64), "application/pdf", `${safeName}_Evaluation.pdf`);
+    
+    const adminEmail = "elmer@bon.com.sa";
+    let ccList = [adminEmail];
+    if (trainerEmail && String(trainerEmail).includes("@") && String(trainerEmail).toLowerCase() !== String(adminEmail).toLowerCase()) {
+       ccList.push(trainerEmail);
+    }
+    
+    const subject = `Evaluation Report: ${traineeName} - ${evalType}`;
+    const htmlBody = `
+      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h2 style="color: #ea580c; margin-top: 0;">Evaluation Completed</h2>
+        <p>The performance evaluation for <strong>${traineeName}</strong> has been successfully submitted.</p>
+        <p>A PDF copy is attached.</p>
+      </div>
+    `;
     
     MailApp.sendEmail({
       to: traineeEmail,
@@ -618,13 +575,42 @@ function apiSendEvaluationEmail(traineeEmail, trainerEmail, traineeName, evalTyp
       attachments: [blob],
       name: APP_NAME
     });
-    return true;
+    return { success: true, message: "Email sent successfully!" };
   } catch(e) {
-    const msg = (e.message || e.toString()).toLowerCase();
-    if (msg.includes("permission") || msg.includes("send_mail")) {
-       throw new Error("⛔ PERMISSION DENIED: You must run the function '_1_Run_This_First_To_Authorize' in the Script Editor.");
+    return { success: false, message: "Failed: " + e.message };
+  }
+}
+
+// --- API: Send Combined Email (NEW for Dashboard) ---
+function apiSendCombinedEmail(id1, id2, traineeEmail, trainerEmail, traineeName) {
+  try {
+    if (!traineeEmail || !String(traineeEmail).includes("@")) {
+      return { success: false, message: "Invalid trainee email." };
     }
-    throw new Error("Failed to send email: " + e.message);
+
+    const reportData = apiGetCombinedReport(id1, id2);
+    if (!reportData || !reportData.base64) {
+      return { success: false, message: "Could not generate combined report." };
+    }
+
+    // FIX: Clean filename to prevent MailApp crashes with Arabic/Special characters
+    const safeName = String(traineeName).replace(/[^a-zA-Z0-9]/g, '_');
+    const blob = Utilities.newBlob(Utilities.base64Decode(reportData.base64), "application/pdf", `${safeName}_Overall_Report.pdf`);
+
+    let ccList = ["elmer@bon.com.sa"];
+    if (trainerEmail && String(trainerEmail).includes("@")) ccList.push(trainerEmail);
+
+    MailApp.sendEmail({
+      to: traineeEmail,
+      cc: ccList.join(","),
+      subject: `Overall Performance Report: ${traineeName}`,
+      htmlBody: "Please find attached the overall performance report.",
+      attachments: [blob],
+      name: APP_NAME
+    });
+    return { success: true, message: "Combined Email sent!" };
+  } catch (e) {
+     return { success: false, message: "Failed: " + e.message };
   }
 }
 
@@ -978,6 +964,13 @@ function createDriveFiles(data, ts, saveToDrive = true) {
   return generatePdfBlob(html, data.traineeId, trainerName, branchName, saveToDrive);
 }
 
+function createCombinedPdf(info, grouped, notes, d1, d2) {
+  // Simple combined PDF generation logic placeholder
+  // In a real scenario, this would be similar to createDriveFiles but aggregating d1 and d2
+  const html = `<!DOCTYPE html><html><body><h1>Combined Report</h1><p>${info.traineeName}</p><p>Overall: ${info.overallGrade}</p></body></html>`;
+  return generatePdfBlob(html, info.traineeId, info.trainerName, info.branch, false);
+}
+
 function getHtmlTemplate(logo, data, trainerName, branchName, dateStr, gMeta, tableRows, notesHtml, resultHeader, colCount) {
   const currentGrade = data.overallGrade || "";
   const getRowStyle = (rowGrade) => {
@@ -1113,7 +1106,7 @@ function getHtmlTemplate(logo, data, trainerName, branchName, dateStr, gMeta, ta
                ${notesHtml}
             </td>
             <td style="width: 50%; vertical-align: top; border: none;">
-               <div class="section-header">Final Remark Assessment</div>
+               <div class="section-header">Final Remark Assessment | تقييم الملاحظات النهائية</div>
                ${legendHtml}
             </td>
           </tr>
