@@ -1,11 +1,26 @@
 /* 
  * Field Training Portal - Backend Script
+ * 
+ * DEPLOYMENT INSTRUCTIONS:
+ * 1. Execute as: Me (your account)
+ * 2. Who has access: Anyone
  */
 
 // --- Configuration ---
 const APP_NAME = "Field Training Portal";
 const ROOT_FOLDER_NAME = "Field Trainer";
-const REGISTRATION_FOLDER_ID = "1P5OgNJU-s8PSVEey5hoy1Zx91THKhKmR";
+const TARGET_IMAGE_FOLDER_ID = "1P5OgNJU-s8PSVEey5hoy1Zx91THKhKmR"; // UPDATED FOLDER ID
+
+// --- DATA SANITIZATION HELPER ---
+// Prevents React crashes by ensuring everything is a string
+function safeString(val) {
+  if (val === null || val === undefined) return "";
+  if (val instanceof Date) {
+    // Return ISO string for consistent parsing, or a simple date string
+    return val.toISOString(); 
+  }
+  return String(val).trim();
+}
 
 /**
  * 🔴 IMPORTANT: RUN THIS FUNCTION FIRST TO FIX PERMISSION ERRORS 🔴
@@ -14,19 +29,45 @@ function _1_Run_This_First_To_Authorize() {
   console.log("--- STARTING AUTHORIZATION SEQUENCE ---");
   
   // 1. Email Scope
-  const quota = MailApp.getRemainingDailyQuota();
-  console.log("✅ Email Permission Granted. Daily quota: " + quota);
+  try {
+    const quota = MailApp.getRemainingDailyQuota();
+    console.log("✅ Email Permission Granted. Daily quota: " + quota);
+  } catch (e) {
+    console.error("❌ Email Permission Error: " + e.message);
+  }
   
-  // 2. Drive Scope
-  const root = DriveApp.getRootFolder();
-  console.log("✅ Drive Permission Granted. Root folder: " + root.getName());
+  // 2. Drive Scope (Read/Write)
+  // We explicitly create a file in the TARGET folder to ensure the 'https://www.googleapis.com/auth/drive' scope is fully active for this folder.
+  try {
+    const targetFolder = DriveApp.getFolderById(TARGET_IMAGE_FOLDER_ID);
+    const tempFile = targetFolder.createFile("Auth_Check_Delete_Me.txt", "This file checks for write permissions.");
+    tempFile.setTrashed(true); // Delete immediately
+    console.log("✅ Drive Permission Granted. Write access confirmed for folder: " + targetFolder.getName());
+  } catch (e) {
+    console.error("❌ Drive Permission Error: " + e.message);
+    console.log("Attempting fallback check on Root folder...");
+    try {
+       const root = DriveApp.getRootFolder();
+       root.createFile("Temp_Root_Check.txt", "Fallback").setTrashed(true);
+       console.log("✅ Root access OK, but specific folder access failed. Check folder ID and sharing settings.");
+    } catch(e2) {
+       console.error("❌ Fatal Drive Error: " + e2.message);
+    }
+  }
   
   // 3. Spreadsheet Scope
-  const temp = SpreadsheetApp.create("Temp_Auth_Check_Delete_Me");
-  const tempId = temp.getId();
-  console.log("✅ Spreadsheet Permission Granted.");
-  
-  try { DriveApp.getFileById(tempId).setTrashed(true); } catch(e) {}
+  try {
+    const temp = SpreadsheetApp.create("Temp_Auth_Check_Delete_Me");
+    const tempId = temp.getId();
+    console.log("✅ Spreadsheet Permission Granted.");
+    try {
+      DriveApp.getFileById(tempId).setTrashed(true);
+    } catch(cleanupError) {
+      console.log("⚠️ Temp file cleanup skipped: " + cleanupError.message);
+    }
+  } catch(e) {
+    console.error("❌ Spreadsheet Error: " + e.message);
+  }
 
   console.log("--- SUCCESS: ALL PERMISSIONS GRANTED. YOU MAY NOW DEPLOY. ---");
   return "SUCCESS: Permissions granted. Please Redeploy the app.";
@@ -45,6 +86,7 @@ function doGet(e) {
 
 function resetSystem() {
   PropertiesService.getScriptProperties().deleteAllProperties();
+  console.log("System Reset Complete.");
   return "System Reset Complete. Please refresh the web app.";
 }
 
@@ -90,7 +132,7 @@ function getSpreadsheet() {
   ]);
   ensureTab("Responses", ["Response ID", "Trainee ID", "Trainee Name", "Eval Type", "Position", "Trainer", "Branch", "TL", "Grade", "Submitted At", "PDF Link"]);
   ensureTab("Requests", ["Request ID", "Response ID", "Trainer Name", "Trainee Name", "Eval Type", "Reason", "Status", "Timestamp"]);
-  ensureTab("RegistrationRequests", ["Request ID", "Name", "ID Number", "Password", "Position", "Branch", "Email", "Status", "Timestamp", "Image Link"]);
+  ensureTab("RegistrationRequests", ["Request ID", "Name", "ID Number", "Password", "Position", "Branch", "Email", "Status", "Timestamp"]);
 
   return ss;
 }
@@ -103,15 +145,15 @@ function apiLogin(idNumber, password, portal) {
   
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (String(row[0]).trim() === String(idNumber).trim() && String(row[2]) === String(password)) {
+    if (safeString(row[0]) === safeString(idNumber) && safeString(row[2]) === safeString(password)) {
       const user = { 
-        id: row[0], 
-        name: row[1], 
-        position: row[3], 
-        branch: row[4], 
-        role: row[5], 
-        image: row[6] || "",
-        email: row[7] || "" 
+        id: safeString(row[0]), 
+        name: safeString(row[1]), 
+        position: safeString(row[3]), 
+        branch: safeString(row[4]), 
+        role: safeString(row[5]), 
+        image: safeString(row[6]),
+        email: safeString(row[7]) 
       };
       logAction(user, "Login");
       return user;
@@ -130,6 +172,64 @@ function apiLogout(user) {
   return true;
 }
 
+// --- API: Profile Image Update (Robust Fallback) ---
+function apiUpdateUserImage(userId, base64Data) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName("Users");
+  const data = sheet.getDataRange().getValues();
+  
+  // Find User Row
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (safeString(data[i][0]) === safeString(userId)) {
+      rowIndex = i + 1;
+      break;
+    }
+  }
+  
+  if (rowIndex === -1) throw new Error("User not found.");
+
+  // Decode Data
+  const split = base64Data.split(',');
+  let type = "image/png";
+  if (split[0].includes("jpeg")) type = "image/jpeg";
+  const bytes = Utilities.base64Decode(split[1]);
+  const blob = Utilities.newBlob(bytes, type, `profile_${userId}_${Date.now()}`);
+
+  let file;
+  
+  // Strategy: Try Target Folder -> Fail -> Try Fallback "User_Images" in Root -> Fail
+  try {
+    const folder = DriveApp.getFolderById(TARGET_IMAGE_FOLDER_ID);
+    file = folder.createFile(blob);
+  } catch (e) {
+    console.warn("Primary folder save failed (" + e.message + "). Attempting fallback to 'User_Images'.");
+    try {
+      const root = DriveApp.getRootFolder();
+      const fallbackFolder = getFolderInParent(root, "User_Images") || root.createFolder("User_Images");
+      file = fallbackFolder.createFile(blob);
+    } catch (e2) {
+      // If even root fallback fails, it's definitely a permission scope issue
+      throw new Error("Could not save image to Drive. Please ensure the Admin has run the Authorization function. Details: " + e2.message);
+    }
+  }
+  
+  // Attempt to set public sharing
+  try { 
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); 
+  } catch(e) {
+    console.warn("Could not set public permission on image: " + e.message);
+  }
+  
+  const fileId = file.getId();
+  const publicUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+  
+  // Update Sheet (Image Link is Column 7 -> Index 6, so column number 7)
+  sheet.getRange(rowIndex, 7).setValue(publicUrl);
+  
+  return publicUrl;
+}
+
 // --- API: Password Reset ---
 function apiRequestPasswordReset(idNumber) {
   const ss = getSpreadsheet();
@@ -140,9 +240,9 @@ function apiRequestPasswordReset(idNumber) {
   let userName = "";
   
   for(let i=1; i<data.length; i++) {
-    if(String(data[i][0]).trim() === String(idNumber).trim()) {
-      userName = data[i][1];
-      userEmail = data[i][7];
+    if(safeString(data[i][0]) === safeString(idNumber)) {
+      userName = safeString(data[i][1]);
+      userEmail = safeString(data[i][7]);
       break;
     }
   }
@@ -164,7 +264,7 @@ function apiRequestPasswordReset(idNumber) {
           <p>Hello ${userName},</p>
           <p>We received a request to reset your password. Use the following code to proceed:</p>
           <h2 style="background: #f1f5f9; padding: 15px; letter-spacing: 5px; text-align: center; border-radius: 8px;">${otp}</h2>
-          <p style="color: #666; font-size: 12px;">This code expires in 10 minutes. If you did not request this, please ignore this email.</p>
+          <p style="color: #666; font-size: 12px;">This code expires in 10 minutes.</p>
         </div>
       `
     });
@@ -180,7 +280,7 @@ function apiResetPassword(idNumber, otp, newPassword) {
   const key = 'RESET_' + idNumber;
   const raw = props.getProperty(key);
   
-  if(!raw) throw new Error("Invalid or expired reset request. Please request a new code.");
+  if(!raw) throw new Error("Invalid or expired reset request.");
   
   const data = JSON.parse(raw);
   if(new Date().getTime() > data.expires) {
@@ -196,8 +296,8 @@ function apiResetPassword(idNumber, otp, newPassword) {
   
   let found = false;
   for(let i=1; i<sheetData.length; i++) {
-    if(String(sheetData[i][0]).trim() === String(idNumber).trim()) {
-      sheet.getRange(i+1, 3).setValue(newPassword);
+    if(safeString(sheetData[i][0]) === safeString(idNumber)) {
+      sheet.getRange(i+1, 3).setValue(newPassword); 
       found = true;
       break;
     }
@@ -209,6 +309,10 @@ function apiResetPassword(idNumber, otp, newPassword) {
   return true;
 }
 
+function apiRegister(data) {
+   throw new Error("Direct registration disabled. Use approval flow.");
+}
+
 function apiSubmitRegistration(data) {
   const ss = getSpreadsheet();
   const uSheet = ss.getSheetByName("Users");
@@ -216,39 +320,17 @@ function apiSubmitRegistration(data) {
   
   const uData = uSheet.getDataRange().getValues();
   for(let i=1; i<uData.length; i++) {
-    if(String(uData[i][0]) === String(data.idNumber)) throw new Error("ID Number already registered.");
+    if(safeString(uData[i][0]) === safeString(data.idNumber)) throw new Error("ID Number already registered.");
   }
 
   const rData = rSheet.getDataRange().getValues();
   for(let i=1; i<rData.length; i++) {
-    if(String(rData[i][2]) === String(data.idNumber) && rData[i][7] === "Pending") throw new Error("Registration already pending for this ID.");
+    if(safeString(rData[i][2]) === safeString(data.idNumber) && safeString(rData[i][7]) === "Pending") throw new Error("Registration already pending for this ID.");
   }
   
-  // Image Upload Logic with explicit error handling
-  let imageLink = "";
-  if (data.imageBase64) {
-    try {
-      let folder;
-      try {
-        folder = DriveApp.getFolderById(REGISTRATION_FOLDER_ID);
-      } catch (err) {
-        throw new Error("Registration Image Folder ID is invalid or not found.");
-      }
-      
-      const cleanBase64 = data.imageBase64.split(',')[1] || data.imageBase64; 
-      const blob = Utilities.newBlob(Utilities.base64Decode(cleanBase64), data.mimeType || 'image/jpeg', `${data.idNumber}_${data.name.replace(/\s+/g,'_')}`);
-      const file = folder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      imageLink = file.getUrl();
-    } catch (e) {
-      // Throw error so frontend knows upload failed
-      throw new Error("Failed to upload profile photo to Drive: " + e.message);
-    }
-  }
-
   const reqId = Utilities.getUuid();
   const ts = new Date().toISOString();
-  rSheet.appendRow([reqId, data.name, data.idNumber, data.password, data.position, data.branch, data.email, "Pending", ts, imageLink]);
+  rSheet.appendRow([reqId, data.name, data.idNumber, data.password, data.position, data.branch, data.email, "Pending", ts]);
 
   try {
     MailApp.sendEmail({
@@ -262,7 +344,6 @@ function apiSubmitRegistration(data) {
           <li><strong>ID Number:</strong> ${data.idNumber}</li>
           <li><strong>Position:</strong> ${data.position}</li>
           <li><strong>Email:</strong> ${data.email}</li>
-          ${imageLink ? `<li><strong>Profile Photo:</strong> <a href="${imageLink}">View Photo</a></li>` : ''}
         </ul>
       `
     });
@@ -280,16 +361,9 @@ function apiGetRegistrationRequests() {
   if (data.length <= 1) return [];
   
   return data.slice(1)
-    .filter(r => r[7] === 'Pending')
+    .filter(r => safeString(r[7]) === 'Pending')
     .map(r => ({
-      reqId: r[0], 
-      name: r[1], 
-      idNumber: r[2], 
-      position: r[4], 
-      branch: r[5], 
-      email: r[6], 
-      timestamp: r[8],
-      imageLink: r[9] || ""
+      reqId: safeString(r[0]), name: safeString(r[1]), idNumber: safeString(r[2]), position: safeString(r[4]), branch: safeString(r[5]), email: safeString(r[6]), timestamp: safeString(r[8])
     }));
 }
 
@@ -303,7 +377,7 @@ function apiProcessRegistration(reqId, action) {
   let rowData = null;
   
   for(let i=1; i<rData.length; i++) {
-    if(String(rData[i][0]) === String(reqId)) {
+    if(safeString(rData[i][0]) === safeString(reqId)) {
       rowIndex = i + 1;
       rowData = rData[i];
       break;
@@ -321,17 +395,13 @@ function apiProcessRegistration(reqId, action) {
      const pos = rowData[4];
      const branch = rowData[5];
      const email = rowData[6];
-     const uploadedImage = rowData[9];
+     const role = (safeString(pos).toUpperCase() === 'ADMIN') ? 'ADMIN' : 'TRAINER';
      
-     const role = (String(pos).toUpperCase() === 'ADMIN') ? 'ADMIN' : 'TRAINER';
-     
-     const image = uploadedImage && uploadedImage.startsWith("http") 
-        ? uploadedImage 
-        : `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
+     const image = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
      
      uSheet.appendRow([id, name, pass, pos, branch, role, image, email]);
 
-     if (email && email.includes("@")) {
+     if (email && String(email).includes("@")) {
        try {
          MailApp.sendEmail({
            to: email,
@@ -362,12 +432,12 @@ function apiGetFTDatabase() {
   const values = sheet.getDataRange().getValues();
   if (values.length <= 1) return [];
   return values.slice(1).map(row => ({
-    trainerName: row[0], 
-    branch: row[1], 
-    teamLeader: row[2], 
-    area: row[3],
-    traineeId: row[4],     
-    traineeName: row[5]
+    trainerName: safeString(row[0]), 
+    branch: safeString(row[1]), 
+    teamLeader: safeString(row[2]), 
+    area: safeString(row[3]),
+    traineeId: safeString(row[4]),     
+    traineeName: safeString(row[5])
   }));
 }
 
@@ -384,10 +454,10 @@ function apiGetQuestions() {
   }
   
   return values.slice(1).map(row => ({
-    id: row[0], category: row[1], text: row[2], 
-    type: String(row[3]).toLowerCase().trim(),
-    options: row[4] ? String(row[4]).split(',').map(o => o.trim()) : [],
-    targetPosition: row[5] || 'Both'
+    id: safeString(row[0]), category: safeString(row[1]), text: safeString(row[2]), 
+    type: safeString(row[3]).toLowerCase(),
+    options: row[4] ? safeString(row[4]).split(',').map(o => o.trim()) : [],
+    targetPosition: safeString(row[5]) || 'Both'
   }));
 }
 
@@ -398,7 +468,7 @@ function apiCheckPreviousEvaluation(id) {
   const headers = data[0];
   const now = new Date();
   
-  const searchId = String(id).trim().toLowerCase();
+  const searchId = safeString(id).toLowerCase();
   const emailIndex = headers.indexOf("Trainee Email");
 
   let result = { 
@@ -409,25 +479,25 @@ function apiCheckPreviousEvaluation(id) {
   };
   
   for(let i=1; i<data.length; i++) {
-    const rowId = String(data[i][1]).trim().toLowerCase();
+    const rowId = safeString(data[i][1]).toLowerCase();
     
     if(rowId === searchId) {
       result.found = true;
-      result.traineeName = data[i][2];
-      result.position = data[i][4];
-      result.branch = data[i][6];
-      result.teamLeader = data[i][7];
+      result.traineeName = safeString(data[i][2]);
+      result.position = safeString(data[i][4]);
+      result.branch = safeString(data[i][6]);
+      result.teamLeader = safeString(data[i][7]);
       
-      if (emailIndex > -1 && data[i][emailIndex]) {
-          result.email = data[i][emailIndex];
+      if (emailIndex > -1) {
+          result.email = safeString(data[i][emailIndex]);
       }
 
       const dateStr = data[i][9];
       if(dateStr) {
          const date = new Date(dateStr);
          if (date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) {
-             const type = data[i][3];
-             const grade = data[i][8];
+             const type = safeString(data[i][3]);
+             const grade = safeString(data[i][8]);
              if(type === '1st Half') result.first = { grade: grade, date: dateStr };
              if(type === '2nd Half') result.second = { grade: grade, date: dateStr };
          }
@@ -520,11 +590,11 @@ function apiSubmitEvaluation(form) {
 }
 
 function apiSendEvaluationEmail(traineeEmail, trainerEmail, traineeName, evalType, pdfBase64) {
-  if (!traineeEmail || !traineeEmail.includes("@")) throw new Error("Invalid trainee email address.");
+  if (!traineeEmail || !String(traineeEmail).includes("@")) throw new Error("Invalid trainee email address.");
   
   const adminEmail = "elmer@bon.com.sa";
   let ccList = [adminEmail];
-  if (trainerEmail && trainerEmail.includes("@") && trainerEmail.toLowerCase() !== adminEmail.toLowerCase()) {
+  if (trainerEmail && String(trainerEmail).includes("@") && String(trainerEmail).toLowerCase() !== String(adminEmail).toLowerCase()) {
      ccList.push(trainerEmail);
   }
   
@@ -550,11 +620,11 @@ function apiSendEvaluationEmail(traineeEmail, trainerEmail, traineeName, evalTyp
     });
     return true;
   } catch(e) {
-    const msg = e.message || e.toString();
+    const msg = (e.message || e.toString()).toLowerCase();
     if (msg.includes("permission") || msg.includes("send_mail")) {
-       throw new Error("⛔ PERMISSION DENIED: You must run the function '_1_Run_This_First_To_Authorize' in the Script Editor to grant email permissions.");
+       throw new Error("⛔ PERMISSION DENIED: You must run the function '_1_Run_This_First_To_Authorize' in the Script Editor.");
     }
-    throw new Error("Failed to send email: " + msg);
+    throw new Error("Failed to send email: " + e.message);
   }
 }
 
@@ -572,31 +642,31 @@ function apiGetReport(responseId) {
   }
   
   const headers = rData[0];
-  const row = rData.find(r => String(r[0]) === String(responseId));
+  const row = rData.find(r => safeString(r[0]) === safeString(responseId));
   
   if(!row) throw new Error("Report not found");
   
   const formData = {
-    traineeId: row[1],
-    traineeName: row[2],
-    evaluationType: row[3],
-    position: row[4],
-    trainerName: row[5],
-    branch: row[6],
-    teamLeader: row[7],
-    area: row[6], 
-    overallGrade: row[8],
+    traineeId: safeString(row[1]),
+    traineeName: safeString(row[2]),
+    evaluationType: safeString(row[3]),
+    position: safeString(row[4]),
+    trainerName: safeString(row[5]),
+    branch: safeString(row[6]),
+    teamLeader: safeString(row[7]),
+    area: safeString(row[6]), 
+    overallGrade: safeString(row[8]),
     details: []
   };
 
   const emailIndex = headers.indexOf("Trainee Email");
-  if(emailIndex > -1) formData.email = row[emailIndex];
+  if(emailIndex > -1) formData.email = safeString(row[emailIndex]);
   
   for(let j=11; j<headers.length; j++) {
      const qText = headers[j];
      if (qText === "Trainee Email") continue;
 
-     const ans = row[j];
+     const ans = safeString(row[j]);
      if(qText && ans !== "") {
        formData.details.push({
          category: qMap[qText] || "General",
@@ -623,8 +693,8 @@ function apiGetCombinedReport(id1, id2) {
      qMap[cData[i][2]] = cData[i][1];
   }
 
-  const row1 = id1 ? rData.find(r => String(r[0]) === String(id1)) : null;
-  const row2 = id2 ? rData.find(r => String(r[0]) === String(id2)) : null;
+  const row1 = id1 ? rData.find(r => safeString(r[0]) === safeString(id1)) : null;
+  const row2 = id2 ? rData.find(r => safeString(r[0]) === safeString(id2)) : null;
   
   if (!row1 && !row2) throw new Error("No data found.");
   
@@ -633,7 +703,7 @@ function apiGetCombinedReport(id1, id2) {
     if(!row) return {};
     const obj = {};
     for(let j=11; j<headers.length; j++) {
-       if(headers[j] && row[j] !== "" && headers[j] !== "Trainee Email") obj[headers[j]] = row[j];
+       if(headers[j] && row[j] !== "" && headers[j] !== "Trainee Email") obj[headers[j]] = safeString(row[j]);
     }
     return obj;
   };
@@ -643,17 +713,17 @@ function apiGetCombinedReport(id1, id2) {
   
   const base = row2 || row1; 
   const info = {
-    traineeName: base[2],
-    traineeId: base[1],
-    position: base[4],
-    trainerName: base[5],
-    branch: base[6],
-    area: base[6],
-    grade1: row1 ? row1[8] : "-",
-    grade2: row2 ? row2[8] : "-",
-    date1: row1 ? row1[9] : null,
-    date2: row2 ? row2[9] : null,
-    overallGrade: calculateOverall(row1 ? row1[8] : null, row2 ? row2[8] : null)
+    traineeName: safeString(base[2]),
+    traineeId: safeString(base[1]),
+    position: safeString(base[4]),
+    trainerName: safeString(base[5]),
+    branch: safeString(base[6]),
+    area: safeString(base[6]),
+    grade1: row1 ? safeString(row1[8]) : "-",
+    grade2: row2 ? safeString(row2[8]) : "-",
+    date1: row1 ? safeString(row1[9]) : null,
+    date2: row2 ? safeString(row2[9]) : null,
+    overallGrade: calculateOverall(row1 ? safeString(row1[8]) : null, row2 ? safeString(row2[8]) : null)
   };
   
   const validGrades = ["A+", "A", "B", "C", "D"];
@@ -688,11 +758,11 @@ function apiRequestEdit(responseId, trainerName, reason) {
   const respSheet = ss.getSheetByName("Responses");
   
   const rData = respSheet.getDataRange().getValues();
-  const row = rData.find(r => String(r[0]) === String(responseId));
+  const row = rData.find(r => safeString(r[0]) === safeString(responseId));
   if (!row) throw new Error("Evaluation not found.");
   
   const reqData = reqSheet.getDataRange().getValues();
-  const existing = reqData.find(r => String(r[1]) === String(responseId) && String(r[6]) === "Pending");
+  const existing = reqData.find(r => safeString(r[1]) === safeString(responseId) && safeString(r[6]) === "Pending");
   if (existing) throw new Error("A request is already pending for this evaluation.");
   
   const requestId = Utilities.getUuid();
@@ -710,14 +780,14 @@ function apiGetRequests(role, userName) {
   if (data.length <= 1) return [];
   
   let list = data.slice(1).map(r => ({
-    requestId: r[0],
-    responseId: r[1],
-    trainerName: r[2],
-    traineeName: r[3],
-    evalType: r[4],
-    reason: r[5],
-    status: r[6],
-    timestamp: r[7]
+    requestId: safeString(r[0]),
+    responseId: safeString(r[1]),
+    trainerName: safeString(r[2]),
+    traineeName: safeString(r[3]),
+    evalType: safeString(r[4]),
+    reason: safeString(r[5]),
+    status: safeString(r[6]),
+    timestamp: safeString(r[7])
   }));
   
   if (role !== 'ADMIN') {
@@ -737,7 +807,7 @@ function apiProcessRequest(reqId, action) {
   let responseId = null;
   
   for(let i=1; i<reqData.length; i++) {
-     if (String(reqData[i][0]) === String(reqId)) {
+     if (safeString(reqData[i][0]) === safeString(reqId)) {
         reqRowIndex = i + 1;
         responseId = reqData[i][1];
         break;
@@ -753,7 +823,7 @@ function apiProcessRequest(reqId, action) {
      let respRowIndex = -1;
      
      for(let i=1; i<respData.length; i++) {
-        if (String(respData[i][0]) === String(responseId)) {
+        if (safeString(respData[i][0]) === safeString(responseId)) {
            respRowIndex = i + 1;
            break;
         }
@@ -772,9 +842,10 @@ function apiProcessRequest(reqId, action) {
 function getLogoBase64() {
   let logoBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="; 
   try {
-     const imageBlob = UrlFetchApp.fetch("https://drive.google.com/file/d/1jt2wAX-UNVtu_rDivmeyOAa2TPwg6OrE/view?usp=drive_link").getBlob();
-     logoBase64 = "data:image/png;base64," + Utilities.base64Encode(imageBlob.getBytes());
-  } catch(e) { console.warn("Logo fetch failed"); }
+     const fileId = "1jt2wAX-UNVtu_rDivmeyOAa2TPwg6OrE";
+     const blob = DriveApp.getFileById(fileId).getBlob();
+     logoBase64 = "data:" + blob.getContentType() + ";base64," + Utilities.base64Encode(blob.getBytes());
+  } catch(e) { console.warn("Logo fetch failed: " + e.message); }
   return logoBase64;
 }
 
@@ -907,75 +978,6 @@ function createDriveFiles(data, ts, saveToDrive = true) {
   return generatePdfBlob(html, data.traineeId, trainerName, branchName, saveToDrive);
 }
 
-function createCombinedPdf(info, grouped, notes, d1, d2) {
-  const logoBase64 = getLogoBase64();
-  const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-  const gMeta = getGradeMeta(info.overallGrade);
-  
-  // Calculate Scores for each half
-  const grades1 = d1 ? Object.values(d1) : [];
-  const grades2 = d2 ? Object.values(d2) : [];
-  info.score1 = calculateNumericScore(grades1);
-  info.score2 = calculateNumericScore(grades2);
-  
-  // Calculate Overall Average Score
-  if (info.score1 > 0 && info.score2 > 0) {
-     info.score = Math.round((info.score1 + info.score2) / 2);
-  } else {
-     info.score = info.score1 || info.score2 || 0;
-  }
-
-  const categories = Object.keys(grouped).sort();
-  let tableRows = "";
-  
-  if (categories.length > 0) {
-    categories.forEach(cat => {
-       let catAr = "";
-       try { catAr = LanguageApp.translate(cat, 'en', 'ar'); } catch(e) {}
-       tableRows += `<tr class="cat-row"><td colspan="2">${escapeHtml(cat)} <span style="font-weight:normal; font-size: 7pt; float: right; direction: rtl;">${escapeHtml(catAr)}</span></td><td></td><td></td></tr>`;
-       
-       grouped[cat].forEach(item => {
-          const c1 = getGradeColor(item.a1);
-          const c2 = getGradeColor(item.a2);
-          
-          let qText = item.q;
-          let qAr = "";
-          
-          if (qText.indexOf('|') !== -1) {
-              const parts = qText.split('|');
-              qText = parts[0].trim();
-              qAr = parts[1].trim();
-          } else {
-              try { qAr = LanguageApp.translate(qText, 'en', 'ar'); } catch(e) {}
-          }
-
-          tableRows += `
-            <tr>
-              <td class="q-cell">${escapeHtml(qText)}</td>
-              <td class="q-cell-ar" style="text-align: right; direction: rtl;">${escapeHtml(qAr)}</td>
-              <td class="a-cell" style="color: ${c1};">${escapeHtml(item.a1)}</td>
-              <td class="a-cell" style="color: ${c2};">${escapeHtml(item.a2)}</td>
-            </tr>
-          `;
-       });
-    });
-  } else {
-    tableRows = `<tr><td colspan="4" style="text-align:center;">No data available.</td></tr>`;
-  }
-
-  let notesHtmlContent = "";
-  if (notes.length > 0) {
-     notesHtmlContent += `<ul style="font-size:7pt; padding-left:15px; color:#475569;">`;
-     notes.forEach(n => { notesHtmlContent += `<li>${escapeHtml(n)}</li>`; });
-     notesHtmlContent += `</ul>`;
-  } else {
-    notesHtmlContent = `<div style="padding:10px; color:#94a3b8; font-style:italic; font-size: 7pt;">No additional comments recorded.</div>`;
-  }
-
-  const html = getHtmlTemplate(logoBase64, info, info.trainerName, info.branch, dateStr, gMeta, tableRows, notesHtmlContent, "1st | 2nd", 4);
-  return generatePdfBlob(html, info.traineeId, info.trainerName, info.branch, false);
-}
-
 function getHtmlTemplate(logo, data, trainerName, branchName, dateStr, gMeta, tableRows, notesHtml, resultHeader, colCount) {
   const currentGrade = data.overallGrade || "";
   const getRowStyle = (rowGrade) => {
@@ -996,11 +998,11 @@ function getHtmlTemplate(logo, data, trainerName, branchName, dateStr, gMeta, ta
 
   const legendHtml = `
     <table class="legend-table">
-        <tr ${getRowStyle("A+")}><td class="g-cell">A+</td><td>Excellent, Consider for Mentorship</td></tr>
-        <tr ${getRowStyle("A")}><td class="g-cell">A</td><td>Good, Maintain and Motivate</td></tr>
-        <tr ${getRowStyle("B")}><td class="g-cell">B</td><td>Continue Routine Supervision</td></tr>
-        <tr ${getRowStyle("C")}><td class="g-cell">C</td><td>Immediate Targeted Coaching</td></tr>
-        <tr ${getRowStyle("D")}><td class="g-cell">D</td><td>Mandatory Retraining & Plan</td></tr>
+        <tr ${getRowStyle("A+")}><td class="g-cell">A+</td><td>Excellent, Consider for Mentorship | ممتاز – يُرشّح للإرشاد والتوجيه</td></tr>
+        <tr ${getRowStyle("A")}><td class="g-cell">A</td><td>Good, Maintain and Motivate | جيد – الاستمرار مع التحفيز</td></tr>
+        <tr ${getRowStyle("B")}><td class="g-cell">B</td><td>Continue Routine Supervision | الاستمرار على الإشراف الروتيني</td></tr>
+        <tr ${getRowStyle("C")}><td class="g-cell">C</td><td>Immediate Targeted Coaching | توجيه وتدريب مركّز فوري</td></tr>
+        <tr ${getRowStyle("D")}><td class="g-cell">D</td><td>Mandatory Retraining & Plan | إعادة تدريب إلزامية مع خطة عمل</td></tr>
     </table>
   `;
   
@@ -1212,7 +1214,7 @@ function apiGetDashboardStats() {
   // Skip header (row 0)
   if (ftData.length > 1) {
      for(let i=1; i<ftData.length; i++) {
-        const tName = String(ftData[i][0]).trim(); // Trainer Name is Col 0
+        const tName = safeString(ftData[i][0]); // Trainer Name is Col 0
         if(tName) {
            trainerTMs[tName] = (trainerTMs[tName] || 0) + 1;
         }
@@ -1225,7 +1227,7 @@ function apiGetDashboardStats() {
   const questionTextToCategory = {};
   if (qData.length > 1) {
     for(let i=1; i<qData.length; i++) {
-       questionTextToCategory[qData[i][2]] = qData[i][1];
+       questionTextToCategory[safeString(qData[i][2])] = safeString(qData[i][1]);
     }
   }
 
@@ -1248,7 +1250,7 @@ function apiGetDashboardStats() {
   if (rData.length > 1) {
     for (let i = 1; i < rData.length; i++) {
       const r = rData[i];
-      const grade = r[8]; 
+      const grade = safeString(r[8]); 
       
       if (gradeCounts.hasOwnProperty(grade)) gradeCounts[grade]++;
       else gradeCounts["D"]++;
@@ -1256,7 +1258,7 @@ function apiGetDashboardStats() {
       totalScore += (gradeScores[grade] || 0);
       
       // --- START TRAINER AGGREGATION ---
-      const tName = String(r[5]).trim();
+      const tName = safeString(r[5]);
       if(tName) {
          if(!trainerStats[tName]) {
             trainerStats[tName] = {
@@ -1270,8 +1272,8 @@ function apiGetDashboardStats() {
          
          const entry = trainerStats[tName];
          entry.total++; // Total Evaluations
-         if(r[6]) entry.branches.add(String(r[6]).trim()); // Branch
-         if(String(r[3]) === "1st Half") entry.firstHalf++; // Total 1st Half
+         if(r[6]) entry.branches.add(safeString(r[6])); // Branch
+         if(safeString(r[3]) === "1st Half") entry.firstHalf++; // Total 1st Half
          
          if(r[9]) {
             const d = new Date(r[9]);
@@ -1279,9 +1281,9 @@ function apiGetDashboardStats() {
             
             // Monthly Completion Check
             if(d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-               const tId = String(r[1]);
+               const tId = safeString(r[1]);
                if(!entry.monthlyTrainees[tId]) entry.monthlyTrainees[tId] = new Set();
-               entry.monthlyTrainees[tId].add(String(r[3])); // Add Eval Type
+               entry.monthlyTrainees[tId].add(safeString(r[3])); // Add Eval Type
             }
          }
       }
@@ -1291,8 +1293,8 @@ function apiGetDashboardStats() {
       let rowCatStats = {};
 
       for (let j = 11; j < r.length; j++) {
-         const val = r[j];
-         const headerName = headers[j]; 
+         const val = safeString(r[j]);
+         const headerName = safeString(headers[j]); 
          
          if (!headerName || val === "") continue;
 
@@ -1331,19 +1333,19 @@ function apiGetDashboardStats() {
          rowCatScores[c] = Math.round(rowCatStats[c].sum / rowCatStats[c].count);
       });
 
-      const email = emailIndex > -1 ? r[emailIndex] : "";
+      const email = emailIndex > -1 ? safeString(r[emailIndex]) : "";
 
       list.push({
-        id: r[0], 
-        traineeId: r[1],
-        traineeName: r[2],
-        evaluationType: r[3],
-        position: r[4],
-        trainerName: r[5],
-        branch: r[6],
-        overallGrade: r[8],
-        date: r[9],
-        pdfLink: r[10],
+        id: safeString(r[0]), 
+        traineeId: safeString(r[1]),
+        traineeName: safeString(r[2]),
+        evaluationType: safeString(r[3]),
+        position: safeString(r[4]),
+        trainerName: safeString(r[5]),
+        branch: safeString(r[6]),
+        overallGrade: safeString(r[8]),
+        date: safeString(r[9]),
+        pdfLink: safeString(r[10]),
         email: email,
         comments: comments.join("; "),
         categoryScores: rowCatScores

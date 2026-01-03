@@ -191,13 +191,15 @@
           codeSent: "Code sent to your email!",
           passChanged: "Password changed successfully! Please login.",
           codeInvalid: "Invalid Code",
-          profilePhoto: "Profile Photo",
-          uploadImage: "Upload Image",
-          openCamera: "Open Camera",
-          takePhoto: "Take Photo",
+          changePhoto: "Change Photo",
+          upload: "Upload",
+          camera: "Camera",
+          takePic: "Take Picture",
+          save: "Save",
+          cancel: "Cancel",
           retake: "Retake",
-          closeCamera: "Close Camera",
-          photoRequired: "A profile photo is required."
+          noCamera: "Camera not accessible",
+          updatePhotoSuccess: "Profile photo updated successfully!"
         },
         ar: {
           loading: "جاري تحميل البوابة...",
@@ -308,13 +310,15 @@
           codeSent: "تم إرسال الرمز إلى بريدك الإلكتروني!",
           passChanged: "تم تغيير كلمة المرور بنجاح! الرجاء تسجيل الدخول.",
           codeInvalid: "رمز غير صحيح",
-          profilePhoto: "الصورة الشخصية",
-          uploadImage: "رفع صورة",
-          openCamera: "فتح الكاميرا",
-          takePhoto: "التقاط صورة",
-          retake: "إعادة",
-          closeCamera: "إغلاق الكاميرا",
-          photoRequired: "الصورة الشخصية مطلوبة"
+          changePhoto: "تغيير الصورة",
+          upload: "رفع",
+          camera: "كاميرا",
+          takePic: "التقاط صورة",
+          save: "حفظ",
+          cancel: "إلغاء",
+          retake: "إعادة التقاط",
+          noCamera: "الكاميرا غير متاحة",
+          updatePhotoSuccess: "تم تحديث الصورة الشخصية بنجاح!"
         }
       };
 
@@ -345,7 +349,9 @@
         sendEmail: (to, trainerEmail, name, type, pdf) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiSendEvaluationEmail(to, trainerEmail, name, type, pdf)),
         // Password Reset APIs
         requestPasswordReset: (id) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiRequestPasswordReset(id)),
-        resetPassword: (id, otp, newPass) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiResetPassword(id, otp, newPass))
+        resetPassword: (id, otp, newPass) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiResetPassword(id, otp, newPass)),
+        // Image Update
+        updateUserImage: (id, base64) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiUpdateUserImage(id, base64))
       };
 
       // --- Icons Helper ---
@@ -475,19 +481,166 @@
       
       const Modal = ({ title, children, onClose }) => (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div className="px-5 py-4 border-b flex justify-between items-center bg-gray-50">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+                <div className="px-5 py-4 border-b flex justify-between items-center bg-gray-50 flex-none">
                     <h3 className="font-bold text-gray-800">{title}</h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><Icon name="x" size={20}/></button>
                 </div>
-                <div className="p-5">{children}</div>
+                <div className="p-5 overflow-y-auto">{children}</div>
             </div>
         </div>
       );
 
+      const ImageUploadModal = ({ isOpen, onClose, onSave }) => {
+        const { t } = useTranslation();
+        const [mode, setMode] = useState('UPLOAD'); // UPLOAD | CAMERA
+        const [preview, setPreview] = useState(null);
+        const [loading, setLoading] = useState(false);
+        const [stream, setStream] = useState(null);
+        const videoRef = useRef(null);
+        const canvasRef = useRef(null);
+
+        useEffect(() => {
+           if (!isOpen) {
+             stopCamera();
+             setPreview(null);
+             setMode('UPLOAD');
+           }
+        }, [isOpen]);
+
+        const stopCamera = () => {
+           if (stream) {
+              stream.getTracks().forEach(track => track.stop());
+              setStream(null);
+           }
+        };
+
+        const startCamera = async () => {
+           setMode('CAMERA');
+           setPreview(null);
+           try {
+              const s = await navigator.mediaDevices.getUserMedia({ video: true });
+              setStream(s);
+              if (videoRef.current) videoRef.current.srcObject = s;
+           } catch(e) {
+              alert(t('noCamera') + ": " + e.message);
+              setMode('UPLOAD');
+           }
+        };
+
+        const handleFileChange = (e) => {
+           const file = e.target.files[0];
+           if (file) {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                 setPreview(reader.result);
+              };
+              reader.readAsDataURL(file);
+           }
+        };
+
+        const capture = () => {
+           if (videoRef.current && canvasRef.current) {
+               const video = videoRef.current;
+               const canvas = canvasRef.current;
+               canvas.width = video.videoWidth;
+               canvas.height = video.videoHeight;
+               const ctx = canvas.getContext('2d');
+               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+               const data = canvas.toDataURL('image/jpeg', 0.8);
+               setPreview(data);
+               stopCamera();
+           }
+        };
+
+        const saveImage = async () => {
+           if (!preview) return;
+           setLoading(true);
+           try {
+              // Resize before sending to save bandwidth and storage
+              const img = new Image();
+              img.src = preview;
+              img.onload = async () => {
+                 const canvas = document.createElement('canvas');
+                 const maxSize = 600; 
+                 let width = img.width;
+                 let height = img.height;
+                 
+                 if (width > height) {
+                    if (width > maxSize) { height *= maxSize / width; width = maxSize; }
+                 } else {
+                    if (height > maxSize) { width *= maxSize / height; height = maxSize; }
+                 }
+                 
+                 canvas.width = width;
+                 canvas.height = height;
+                 const ctx = canvas.getContext('2d');
+                 ctx.drawImage(img, 0, 0, width, height);
+                 const resizedData = canvas.toDataURL('image/jpeg', 0.8);
+                 
+                 await onSave(resizedData);
+                 onClose();
+              };
+           } catch(e) {
+              alert(e.message);
+           } finally {
+              setLoading(false);
+           }
+        };
+
+        if (!isOpen) return null;
+
+        return (
+           <Modal title={t('changePhoto')} onClose={onClose}>
+              <div className="flex gap-2 mb-4">
+                 <button onClick={() => { stopCamera(); setMode('UPLOAD'); }} className={`flex-1 py-2 text-sm font-bold rounded-lg ${mode === 'UPLOAD' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                    <div className="flex items-center justify-center gap-2"><Icon name="upload" size={16} /> {t('upload')}</div>
+                 </button>
+                 <button onClick={startCamera} className={`flex-1 py-2 text-sm font-bold rounded-lg ${mode === 'CAMERA' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                    <div className="flex items-center justify-center gap-2"><Icon name="camera" size={16} /> {t('camera')}</div>
+                 </button>
+              </div>
+
+              <div className="bg-zinc-100 rounded-lg aspect-square flex items-center justify-center overflow-hidden mb-4 relative border border-zinc-200">
+                 {mode === 'UPLOAD' && !preview && (
+                    <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-gray-400 hover:text-orange-500 transition-colors">
+                       <Icon name="image-plus" size={48} />
+                       <span className="text-xs mt-2 font-medium">Click to select image</span>
+                       <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+                    </label>
+                 )}
+                 
+                 {mode === 'CAMERA' && !preview && (
+                    <div className="relative w-full h-full bg-black">
+                       <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover transform scale-x-[-1]" />
+                       <canvas ref={canvasRef} className="hidden" />
+                       <button onClick={capture} className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-white rounded-full p-4 shadow-lg hover:scale-105 transition-transform">
+                          <div className="w-4 h-4 bg-red-500 rounded-full"></div>
+                       </button>
+                    </div>
+                 )}
+
+                 {preview && (
+                    <div className="relative w-full h-full">
+                       <img src={preview} alt="Preview" className="w-full h-full object-cover" />
+                       <button onClick={() => { setPreview(null); if(mode==='CAMERA') startCamera(); }} className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70">
+                          <Icon name="rotate-ccw" size={16} />
+                       </button>
+                    </div>
+                 )}
+              </div>
+
+              <div className="flex gap-2">
+                 <Button variant="secondary" onClick={onClose} disabled={loading}>{t('cancel')}</Button>
+                 <Button onClick={saveImage} isLoading={loading} disabled={!preview}>{t('save')}</Button>
+              </div>
+           </Modal>
+        );
+      };
+
       const ResetPasswordModal = ({ onClose }) => {
          const { t } = useTranslation();
-         const [step, setStep] = useState(1);
+         const [step, setStep] = useState(1); // 1: ID, 2: OTP
          const [id, setId] = useState('');
          const [otp, setOtp] = useState('');
          const [newPass, setNewPass] = useState('');
@@ -512,6 +665,7 @@
          const handleSubmit = async () => {
             if(!otp || !newPass || !confirmPass) return;
             if(newPass !== confirmPass) { setMsg({type:'error', text: "Passwords do not match"}); return; }
+            
             setLoading(true); setMsg(null);
             try {
                await server.resetPassword(id, otp, newPass);
@@ -527,6 +681,7 @@
          return (
             <Modal title={t('resetPass')} onClose={onClose}>
                {msg && <Alert type={msg.type} message={msg.text} />}
+               
                {step === 1 ? (
                   <>
                      <Input label={t('enterId')} value={id} onChange={e => setId(e.target.value)} placeholder="e.g. 1001" />
@@ -553,9 +708,16 @@
               <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {onBack && <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-full"><Icon name={lang === 'ar' ? "arrow-right" : "arrow-left"} /></button>}
-                  <div>
-                    <h1 className="font-bold text-lg leading-tight text-zinc-100">{title}</h1>
-                    {user && <div className="text-xs text-orange-400 opacity-90">{user.name} ({user.position})</div>}
+                  <div className="flex items-center gap-3">
+                    {user && user.image && (
+                       <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-zinc-700 bg-zinc-800 flex-none hidden md:block">
+                          <img src={user.image} alt="Profile" className="w-full h-full object-cover" onError={(e) => e.target.style.display = 'none'} />
+                       </div>
+                    )}
+                    <div>
+                      <h1 className="font-bold text-lg leading-tight text-zinc-100">{title}</h1>
+                      {user && <div className="text-xs text-orange-400 opacity-90">{user.name} ({user.position})</div>}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -653,6 +815,7 @@
           setLoading(true); setErr('');
           try {
             const user = await server.login(id, pass, portal);
+            // Permission Check for Admin Portal
             if (portal === 'ADMIN' && user.role !== 'ADMIN') {
               throw new Error("Access Denied: You do not have Administrator privileges.");
             }
@@ -701,6 +864,7 @@
 
                   <Button isLoading={loading} className="mt-2">{t('login')}</Button>
                 </form>
+                {/* Only Show Register for Evaluation Portal */}
                 {portal === 'EVALUATION' && (
                   <div className="mt-4 text-center">
                     <button onClick={onRegister} className="text-sm text-orange-600 hover:underline">{t('registerNew')}</button>
@@ -716,137 +880,12 @@
 
       const Register = ({ onBack }) => {
         const { t } = useTranslation();
-        const [form, setForm] = useState({ name:'', idNumber:'', password:'', position:'', email:'', imageBase64: '', mimeType: '' });
+        const [form, setForm] = useState({ name:'', idNumber:'', password:'', position:'', email:'' });
         const [loading, setLoading] = useState(false);
         const [showSuccessModal, setShowSuccessModal] = useState(false);
-        const [imagePreview, setImagePreview] = useState(null);
-        const [isProcessingImage, setIsProcessingImage] = useState(false);
-        
-        // Camera States
-        const [isCameraOpen, setIsCameraOpen] = useState(false);
-        const videoRef = useRef(null);
-        const streamRef = useRef(null);
-        const fileInputRef = useRef(null); // Ref for file input
-
-        // --- Robust Image Handling Helpers ---
-        const processImage = (fileOrBlob) => {
-           setIsProcessingImage(true);
-           const reader = new FileReader();
-           reader.onload = (e) => {
-              const img = new Image();
-              // Prevent white canvas issues by ensuring crossOrigin is set if needed (mostly for remote images but good practice)
-              img.crossOrigin = "Anonymous";
-              
-              img.onload = () => {
-                 const canvas = document.createElement('canvas');
-                 const MAX_SIZE = 600; // Reduced to 600 to ensure success payload size
-                 let w = img.width;
-                 let h = img.height;
-                 
-                 // Calculate aspect ratio
-                 if (w > h) {
-                    if (w > MAX_SIZE) { 
-                       h = Math.round(h * (MAX_SIZE / w)); 
-                       w = MAX_SIZE; 
-                    }
-                 } else {
-                    if (h > MAX_SIZE) { 
-                       w = Math.round(w * (MAX_SIZE / h)); 
-                       h = MAX_SIZE; 
-                    }
-                 }
-                 
-                 // CRITICAL FIX: Ensure dimensions are never 0 or float
-                 canvas.width = Math.floor(w) || 100;
-                 canvas.height = Math.floor(h) || 100;
-                 
-                 const ctx = canvas.getContext('2d');
-                 if (ctx) {
-                    // Fill background white to handle transparent PNGs turning black
-                    ctx.fillStyle = "#FFFFFF";
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    
-                    try {
-                       // Force JPEG compression at 0.7 quality to reduce payload size
-                       const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                       setImagePreview(dataUrl);
-                       // Update form with JPEG data
-                       setForm(prev => ({ ...prev, imageBase64: dataUrl, mimeType: 'image/jpeg' }));
-                    } catch (err) {
-                       alert("Error converting image. Please try a different photo.");
-                       console.error(err);
-                    }
-                 }
-                 setIsProcessingImage(false);
-              };
-              
-              img.onerror = () => {
-                 alert("Failed to load image preview. Please try another file.");
-                 setIsProcessingImage(false);
-              };
-              
-              img.src = e.target.result;
-           };
-           reader.readAsDataURL(fileOrBlob);
-        };
-
-        const handleFileChange = (e) => {
-           if (e.target.files && e.target.files[0]) {
-              processImage(e.target.files[0]);
-              // Clear input value so same file can be selected again if retry is needed
-              e.target.value = '';
-           }
-        };
-
-        const startCamera = async () => {
-           setIsCameraOpen(true);
-           try {
-              const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-              streamRef.current = stream;
-              if (videoRef.current) {
-                 videoRef.current.srcObject = stream;
-              }
-           } catch(e) {
-              alert("Camera access denied or not available. Please allow camera permissions or use Upload.");
-              setIsCameraOpen(false);
-           }
-        };
-
-        const stopCamera = () => {
-           if (streamRef.current) {
-              streamRef.current.getTracks().forEach(track => track.stop());
-              streamRef.current = null;
-           }
-           setIsCameraOpen(false);
-        };
-
-        const capturePhoto = () => {
-           if (videoRef.current) {
-              const video = videoRef.current;
-              // Check if video has dimensions
-              if (video.videoWidth > 0 && video.videoHeight > 0) {
-                 const canvas = document.createElement('canvas');
-                 canvas.width = video.videoWidth;
-                 canvas.height = video.videoHeight;
-                 const ctx = canvas.getContext('2d');
-                 ctx.drawImage(video, 0, 0);
-                 canvas.toBlob(blob => {
-                    processImage(blob);
-                    stopCamera();
-                 }, 'image/jpeg');
-              }
-           }
-        };
 
         const handleSubmit = async (e) => {
           e.preventDefault();
-          if (!form.imageBase64) {
-             alert(t('photoRequired'));
-             return;
-          }
-
           setLoading(true);
           try {
             await server.submitRegistration({...form, branch: "TBD"});
@@ -863,37 +902,6 @@
             <div className="max-w-md mx-auto mt-4">
               <Card>
                 <form onSubmit={handleSubmit}>
-                  {/* Profile Photo Section */}
-                  <div className="mb-6 flex flex-col items-center">
-                     <label className="block text-sm font-medium text-slate-700 mb-2">{t('profilePhoto')} <span className="text-red-500">*</span></label>
-                     
-                     <div className="w-24 h-24 rounded-full bg-zinc-100 border border-zinc-300 flex items-center justify-center overflow-hidden mb-3 relative group">
-                        {isProcessingImage ? (
-                           <div className="loader loader-primary w-8 h-8"></div>
-                        ) : imagePreview ? (
-                           <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                        ) : (
-                           <Icon name="user" size={40} className="text-zinc-300" />
-                        )}
-                        {/* Overlay for re-upload indication */}
-                        {imagePreview && !isProcessingImage && (
-                           <div className="absolute inset-0 bg-black/20 hidden group-hover:flex items-center justify-center rounded-full">
-                              <Icon name="pencil" size={16} className="text-white" />
-                           </div>
-                        )}
-                     </div>
-
-                     <div className="flex gap-2">
-                        <label className={`px-3 py-1.5 bg-white border border-zinc-300 rounded text-xs font-medium cursor-pointer hover:bg-zinc-50 flex items-center gap-1 ${isProcessingImage ? 'opacity-50 pointer-events-none' : ''}`}>
-                           <Icon name="upload" size={14} /> {t('uploadImage')}
-                           <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} ref={fileInputRef} />
-                        </label>
-                        <button type="button" onClick={startCamera} disabled={isProcessingImage} className="px-3 py-1.5 bg-white border border-zinc-300 rounded text-xs font-medium hover:bg-zinc-50 flex items-center gap-1 disabled:opacity-50">
-                           <Icon name="camera" size={14} /> {t('openCamera')}
-                        </button>
-                     </div>
-                  </div>
-
                   <Input label={t('fullName')} value={form.name} onChange={e => setForm({...form, name:e.target.value})} required />
                   {/* ID Validation: 4 Digits */}
                   <div className="mb-4">
@@ -917,21 +925,6 @@
                 </form>
               </Card>
             </div>
-
-            {/* Camera Modal */}
-            {isCameraOpen && (
-               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 animate-fade">
-                  <div className="relative w-full max-w-md bg-black rounded-xl overflow-hidden shadow-2xl">
-                     <video ref={videoRef} autoPlay playsInline className="w-full h-auto bg-black"></video>
-                     <div className="absolute bottom-4 left-0 w-full flex justify-center items-center gap-4">
-                        <button onClick={stopCamera} className="px-4 py-2 bg-white/20 text-white text-sm rounded-full backdrop-blur-md hover:bg-white/30">{t('closeCamera')}</button>
-                        <button onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 hover:scale-105 transition-transform flex items-center justify-center shadow-lg">
-                           <div className="w-14 h-14 bg-white rounded-full border-2 border-black"></div>
-                        </button>
-                     </div>
-                  </div>
-               </div>
-            )}
 
             {showSuccessModal && (
                <Modal title="Registration Submitted" onClose={onBack}>
@@ -1425,7 +1418,7 @@
         );
       };
 
-      const Dashboard = ({ user, onLogout, portal }) => {
+      const Dashboard = ({ user, onLogout, portal, onUpdateUser }) => {
         const { t, lang } = useTranslation();
         const [stats, setStats] = useState(null);
         const [requests, setRequests] = useState([]); // Store pending edit requests
@@ -1440,6 +1433,9 @@
         const [editTarget, setEditTarget] = useState(null); // { responseId, type }
         const [editReason, setEditReason] = useState("");
         const [isSubmittingRequest, setSubmittingRequest] = useState(false);
+
+        // Image Update State
+        const [isImageModalOpen, setImageModalOpen] = useState(false);
 
         // --- Filters State ---
         const [dateFrom, setDateFrom] = useState('');
@@ -1497,6 +1493,17 @@
           if (n >= 80) return "B";
           if (n >= 70) return "C";
           return "D";
+        };
+
+        const handleImageUpdate = async (base64) => {
+           try {
+              const newUrl = await server.updateUserImage(user.id, base64);
+              onUpdateUser({ image: newUrl }); // Update local user state
+              alert(t('updatePhotoSuccess'));
+              setImageModalOpen(false);
+           } catch(e) {
+              alert("Error: " + e.message);
+           }
         };
 
         const handleViewReport = async (id) => {
@@ -1769,6 +1776,12 @@
         return (
           <Layout title={portal === 'ADMIN' ? t('adminPortal') : t('dashboard')} user={user} onLogout={onLogout}>
             
+            <ImageUploadModal 
+               isOpen={isImageModalOpen} 
+               onClose={() => setImageModalOpen(false)} 
+               onSave={handleImageUpdate} 
+            />
+
             {isEditModalOpen && (
                <Modal title={t('reqTitle')} onClose={() => setEditModalOpen(false)}>
                   <p className="text-sm text-gray-500 mb-4">{t('reqDesc')}</p>
@@ -1784,17 +1797,35 @@
             )}
 
             <div className="mb-6 print:hidden">
-              <div className={`p-4 rounded-xl flex items-center gap-4 shadow-sm border ${portal === 'ADMIN' ? 'bg-zinc-800 text-white border-zinc-700' : 'bg-white text-slate-800 border-zinc-200'}`}>
-                 <div className={`p-3 rounded-full ${portal === 'ADMIN' ? 'bg-white/10' : 'bg-orange-50 text-orange-600'}`}>
-                    <Icon name={portal === 'ADMIN' ? 'shield-check' : 'user-check'} size={24} />
+              <div className={`p-6 rounded-xl shadow-sm border ${portal === 'ADMIN' ? 'bg-zinc-800 text-white border-zinc-700' : 'bg-white text-slate-800 border-zinc-200'} flex flex-col md:flex-row items-center gap-6`}>
+                 
+                 {/* Profile Image Section */}
+                 <div className="relative group">
+                    <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg bg-zinc-200">
+                       <img src={user.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`} alt="Profile" className="w-full h-full object-cover" />
+                    </div>
+                    {portal !== 'ADMIN' && (
+                        <button onClick={() => setImageModalOpen(true)} className="absolute bottom-0 right-0 p-2 bg-orange-600 text-white rounded-full shadow hover:bg-orange-700 transition-colors" title={t('changePhoto')}>
+                           <Icon name="camera" size={16} />
+                        </button>
+                    )}
                  </div>
-                 <div>
-                    <h2 className="text-lg font-bold">{portal === 'ADMIN' ? t('adminOverview') : t('myTracker')}</h2>
-                    <p className={`text-sm ${portal === 'ADMIN' ? 'text-slate-300' : 'text-slate-500'}`}>
-                       {portal === 'ADMIN' 
-                         ? t('viewingAdmin') 
-                         : t('viewingTrainer') + user.name}
-                    </p>
+
+                 <div className="text-center md:text-left flex-1">
+                    <h2 className="text-2xl font-bold">{user.name}</h2>
+                    <p className={`text-sm font-mono mb-2 ${portal === 'ADMIN' ? 'text-slate-400' : 'text-slate-500'}`}>{user.id}</p>
+                    <div className="flex flex-wrap justify-center md:justify-start gap-2">
+                       <span className="px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">{user.position}</span>
+                       <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200">{user.branch || 'HQ'}</span>
+                       <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200">{user.email}</span>
+                    </div>
+                 </div>
+
+                 <div className={`hidden md:block p-4 rounded-xl ${portal === 'ADMIN' ? 'bg-white/5' : 'bg-zinc-50'}`}>
+                    <div className="flex items-center gap-3 opacity-80">
+                        <Icon name={portal === 'ADMIN' ? 'shield-check' : 'bar-chart-2'} size={20} />
+                        <span className="font-semibold">{portal === 'ADMIN' ? t('adminOverview') : t('myTracker')}</span>
+                    </div>
                  </div>
               </div>
             </div>
@@ -1821,7 +1852,6 @@
                                     <div className="font-medium">{req.name}</div>
                                     <div className="text-xs text-slate-500">ID: {req.idNumber}</div>
                                     <div className="text-[10px] text-gray-400">{req.email}</div>
-                                    {req.imageLink && <div className="mt-1"><a href={req.imageLink} target="_blank" className="text-xs text-blue-600 underline">View Photo</a></div>}
                                  </td>
                                  <td className="p-2 text-xs">{req.position} <br/> <span className="text-gray-400">{req.branch}</span></td>
                                  <td className="p-2 text-right flex justify-end gap-1">
@@ -1910,7 +1940,7 @@
                 { label: t('kpiEmployees'), val: derivedStats.totalEmployees, color: 'border-orange-500', icon: 'users', bg: 'bg-orange-50', text: 'text-orange-600' },
                 { label: t('kpiAvg'), val: derivedStats.average + '%', color: 'border-emerald-500', icon: 'star', bg: 'bg-emerald-50', text: 'text-emerald-600' },
                 { label: t('kpiPos'), val: `${derivedStats.memberCount} | ${derivedStats.leaderCount}`, color: 'border-blue-500', icon: 'briefcase', bg: 'bg-blue-50', text: 'text-blue-600' },
-                { label: t('kpiHalves'), val: `${derivedStats.firstHalf} / ${derivedStats.secondHalf}`, color: 'border-purple-500', icon: 'trending-up', bg: 'bg-purple-50', text: 'text-purple-600' },
+                { label: t('kpiHalves'), val: `${derivedStats.firstHalf} | ${derivedStats.secondHalf}`, color: 'border-purple-500', icon: 'trending-up', bg: 'bg-purple-50', text: 'text-purple-600' },
               ].map((k, i) => (
                 <div key={i} className={`bg-white p-4 rounded-xl shadow-sm border-l-4 ${k.color} flex items-center justify-between`}>
                   <div>
@@ -2243,7 +2273,7 @@
         if(page === 'LANDING') content = <Landing onSelect={goLogin} />;
         else if(page === 'REGISTER') content = <Register onBack={() => setPage('LOGIN')} />;
         else if(page === 'LOGIN') content = <Login portal={portal} onLogin={goApp} onBack={() => setPage('LANDING')} onRegister={() => setPage('REGISTER')} />;
-        else if(page === 'APP') content = portal === 'EVALUATION' ? <EvaluationForm user={user} onLogout={doLogout} /> : <Dashboard user={user} onLogout={doLogout} portal={portal} />;
+        else if(page === 'APP') content = portal === 'EVALUATION' ? <EvaluationForm user={user} onLogout={doLogout} /> : <Dashboard user={user} onLogout={doLogout} portal={portal} onUpdateUser={(u) => setUser({...user, ...u})} />;
 
         return (
           <LanguageContext.Provider value={ctxVal}>
