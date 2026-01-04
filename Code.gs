@@ -154,7 +154,15 @@ function apiLogin(idNumber, password, portal) {
   }
   
   if (idNumber === 'ADMIN01' && password === 'admin123') {
-    return { id: 'ADMIN01', name: 'System Admin', position: 'Admin', branch: 'HQ', role: 'ADMIN', image: '', email: 'elmer@bon.com.sa' };
+    return { 
+      id: 'ADMIN01', 
+      name: 'System Admin', 
+      position: 'Admin', 
+      branch: 'HQ', 
+      role: 'ADMIN', 
+      image: 'https://drive.google.com/thumbnail?sz=w1000&id=1jt2wAX-UNVtu_rDivmeyOAa2TPwg6OrE', 
+      email: 'elmer@bon.com.sa' 
+    };
   }
   
   throw new Error("Invalid Credentials");
@@ -1415,6 +1423,9 @@ function apiGetDashboardStats() {
         if(set.has("1st Half") && set.has("2nd Half")) totalComplete++;
      });
      
+     const assigned = trainerTMs[name] || 0;
+     const perf = assigned > 0 ? Math.round((totalComplete / assigned) * 100) : 0;
+
      return {
         name: name,
         totalTM: data.uniqueTMs.size, 
@@ -1426,9 +1437,14 @@ function apiGetDashboardStats() {
         totalEmployees: data.employees.size,
         totalTL: data.uniqueTLs.size,
         totalRequests: trainerRequests[name] || 0,
-        image: userImages[name] || "" // Added Image from Users sheet
+        image: userImages[name] || "", // Added Image from Users sheet
+        performance: perf,
+        assigned: assigned
      };
   });
+  
+  // Sort by Performance Descending
+  trainerOverview.sort((a, b) => b.performance - a.performance);
   
   const categoryPerformance = Object.keys(categoryStats).map(k => ({
     category: k,
