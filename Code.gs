@@ -12,24 +12,21 @@ const ROOT_FOLDER_NAME = "Field Trainer";
 const TARGET_IMAGE_FOLDER_ID = "1P5OgNJU-s8PSVEey5hoy1Zx91THKhKmR"; // UPDATED FOLDER ID
 
 // --- DATA SANITIZATION HELPER ---
-// Prevents React crashes by ensuring everything is a string
 function safeString(val) {
   if (val === null || val === undefined) return "";
   if (val instanceof Date) {
-    // Return ISO string for consistent parsing, or a simple date string
     return val.toISOString(); 
   }
   return String(val).trim();
 }
 
-// --- IMAGE HANDLING (THE FIX) ---
+// --- IMAGE HANDLING ---
 function saveImageToDrive(base64, fileName, folderId) {
   try {
     let folder;
     try {
       folder = DriveApp.getFolderById(folderId);
     } catch(e) {
-      // Fallback if specific folder fails, try to find/create in Root
       const root = DriveApp.getRootFolder();
       const fallback = root.getFoldersByName("User_Images");
       if (fallback.hasNext()) {
@@ -39,7 +36,6 @@ function saveImageToDrive(base64, fileName, folderId) {
       }
     }
 
-    // Extract content type and bytes
     const contentTypeMatch = base64.match(/^data:(image\/\w+);base64,/);
     if (!contentTypeMatch) throw new Error("Invalid image data");
     
@@ -51,28 +47,20 @@ function saveImageToDrive(base64, fileName, folderId) {
     const blob = Utilities.newBlob(bytes, contentType, fileName);
     const file = folder.createFile(blob);
 
-    // CRITICAL: Set permission to ANYONE_WITH_LINK so it renders in <img> tags
     try {
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     } catch (permErr) {
-      console.warn("Could not set public sharing (might be restricted by domain): " + permErr.message);
+      console.warn("Could not set public sharing: " + permErr.message);
     }
 
-    // FIX: Use thumbnail link instead of uc?id= for better display reliability in browsers
-    // sz=w1000 requests a thumbnail up to 1000px wide. This bypasses 3rd party cookie blocking issues.
     return `https://drive.google.com/thumbnail?sz=w1000&id=${file.getId()}`;
   } catch (e) {
     throw new Error("Image save failed: " + e.message);
   }
 }
 
-/**
- * 🔴 IMPORTANT: RUN THIS FUNCTION FIRST TO FIX PERMISSION ERRORS 🔴
- */
 function _1_Run_This_First_To_Authorize() {
   console.log("--- STARTING AUTHORIZATION SEQUENCE ---");
-  
-  // 1. Email Scope
   try {
     const quota = MailApp.getRemainingDailyQuota();
     console.log("✅ Email Permission Granted. Daily quota: " + quota);
@@ -80,16 +68,14 @@ function _1_Run_This_First_To_Authorize() {
     console.error("❌ Email Permission Error: " + e.message);
   }
   
-  // 2. Drive Scope (Read/Write)
   try {
     const targetFolder = DriveApp.getFolderById(TARGET_IMAGE_FOLDER_ID);
     const tempFile = targetFolder.createFile("Auth_Check_Delete_Me.txt", "This file checks for write permissions.");
-    tempFile.setTrashed(true); // Delete immediately
+    tempFile.setTrashed(true);
     console.log("✅ Drive Permission Granted. Write access confirmed.");
   } catch (e) {
     console.error("❌ Drive Permission Error: " + e.message);
   }
-  
   return "SUCCESS: Permissions granted. Please Redeploy the app.";
 }
 
@@ -100,13 +86,6 @@ function doGet(e) {
     .setTitle(APP_NAME)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-// --- ADMIN UTILS ---
-
-function resetSystem() {
-  PropertiesService.getScriptProperties().deleteAllProperties();
-  return "System Reset Complete. Please refresh the web app.";
 }
 
 // --- Initialization ---
@@ -186,13 +165,11 @@ function apiLogout(user) {
   return true;
 }
 
-// --- API: Profile Image Update ---
 function apiUpdateUserImage(userId, base64Data) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName("Users");
   const data = sheet.getDataRange().getValues();
   
-  // Find User Row
   let rowIndex = -1;
   for (let i = 1; i < data.length; i++) {
     if (safeString(data[i][0]) === safeString(userId)) {
@@ -203,27 +180,23 @@ function apiUpdateUserImage(userId, base64Data) {
   
   if (rowIndex === -1) throw new Error("User not found.");
 
-  // Use the safe save function
   const publicUrl = saveImageToDrive(base64Data, `profile_${userId}_${Date.now()}.jpg`, TARGET_IMAGE_FOLDER_ID);
-  
-  // Update Sheet (Image Link is Column 7 -> Index 6, so column number 7)
   sheet.getRange(rowIndex, 7).setValue(publicUrl);
-  
   return publicUrl;
 }
 
-// --- API: Password Reset ---
+function apiGetLogo() {
+  return getLogoBase64();
+}
+
 function apiRequestPasswordReset(idNumber) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName("Users");
   const data = sheet.getDataRange().getValues();
   
   let userEmail = null;
-  let userName = "";
-  
   for(let i=1; i<data.length; i++) {
     if(safeString(data[i][0]) === safeString(idNumber)) {
-      userName = safeString(data[i][1]);
       userEmail = safeString(data[i][7]);
       break;
     }
@@ -278,7 +251,6 @@ function apiResetPassword(idNumber, otp, newPassword) {
   }
   
   if(!found) throw new Error("User record not found during update.");
-  
   props.deleteProperty(key);
   return true;
 }
@@ -341,7 +313,6 @@ function apiProcessRegistration(reqId, action) {
   }
   
   if(rowIndex === -1) throw new Error("Request not found");
-  
   rSheet.getRange(rowIndex, 8).setValue(action);
   
   if(action === 'Approved') {
@@ -353,10 +324,8 @@ function apiProcessRegistration(reqId, action) {
      const email = rowData[6];
      const role = (safeString(pos).toUpperCase() === 'ADMIN') ? 'ADMIN' : 'TRAINER';
      const image = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
-     
      uSheet.appendRow([id, name, pass, pos, branch, role, image, email]);
   }
-  
   return true;
 }
 
@@ -368,7 +337,6 @@ function logAction(user, action) {
   } catch (e) { console.error("Logging failed", e); }
 }
 
-// --- API: Data ---
 function apiGetFTDatabase() {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName("FT Database");
@@ -388,9 +356,7 @@ function apiGetQuestions() {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName("Config");
   const values = sheet.getDataRange().getValues();
-  
   if (values.length <= 1) return [];
-  
   return values.slice(1).map(row => ({
     id: safeString(row[0]), category: safeString(row[1]), text: safeString(row[2]), 
     type: safeString(row[3]).toLowerCase(),
@@ -411,24 +377,19 @@ function apiCheckPreviousEvaluation(id) {
 
   let result = { 
     found: false,
-    traineeName: '', position: '', branch: '', teamLeader: '',
-    email: '',
+    traineeName: '', position: '', branch: '', teamLeader: '', email: '',
     first: null, second: null, completed: false
   };
   
   for(let i=1; i<data.length; i++) {
     const rowId = safeString(data[i][1]).toLowerCase();
-    
     if(rowId === searchId) {
       result.found = true;
       result.traineeName = safeString(data[i][2]);
       result.position = safeString(data[i][4]);
       result.branch = safeString(data[i][6]);
       result.teamLeader = safeString(data[i][7]);
-      
-      if (emailIndex > -1) {
-          result.email = safeString(data[i][emailIndex]);
-      }
+      if (emailIndex > -1) result.email = safeString(data[i][emailIndex]);
 
       const dateStr = data[i][9];
       if(dateStr) {
@@ -442,12 +403,10 @@ function apiCheckPreviousEvaluation(id) {
       }
     }
   }
-  
   if (result.first && result.second) result.completed = true;
   return result.found ? result : null;
 }
 
-// --- API: Submit ---
 function apiSubmitEvaluation(form) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName("Responses");
@@ -480,14 +439,12 @@ function apiSubmitEvaluation(form) {
       question: questionIdToText[qId] || qId,
       answer: answer
     });
-
     const headerName = questionIdToText[qId] || qId;
     keyToHeaderMap[qId] = headerName;
     if (!headers.includes(headerName) && !missingHeaders.includes(headerName)) missingHeaders.push(headerName);
   });
 
   form.details = reportDetails;
-  
   let pdfResult = createDriveFiles(form, ts, true); 
 
   if (missingHeaders.length > 0) {
@@ -502,8 +459,7 @@ function apiSubmitEvaluation(form) {
   
   const requiredSize = Math.max(updatedLastCol, 12);
   const rowData = new Array(requiredSize).fill("");
-
-  const responseId = Utilities.getUuid(); // GENERATE ID
+  const responseId = Utilities.getUuid();
 
   rowData[0] = responseId;
   rowData[1] = form.traineeId;
@@ -527,29 +483,19 @@ function apiSubmitEvaluation(form) {
   });
 
   sheet.appendRow(rowData);
-  
-  // Return the new ID + PDF result to the frontend
   return { ...pdfResult, id: responseId };
 }
 
-// --- API: Send Email (CRITICAL FIX) ---
-// Returns a result object { success: boolean, message: string } instead of throwing errors.
 function apiSendEvaluationEmail(traineeEmail, trainerEmail, traineeName, evalType, responseId) {
   try {
     if (!traineeEmail || !String(traineeEmail).includes("@")) {
       return { success: false, message: "Invalid trainee email address." };
     }
-    
-    // 1. Fetch Report Data using ID
     const reportData = apiGetReport(responseId);
     if (!reportData || !reportData.base64) {
       return { success: false, message: "Could not generate report for email." };
     }
-
-    // FIX: Clean filename to prevent MailApp crashes with Arabic/Special characters
     const safeName = String(traineeName).replace(/[^a-zA-Z0-9]/g, '_');
-    
-    // 2. Convert to Blob
     const blob = Utilities.newBlob(Utilities.base64Decode(reportData.base64), "application/pdf", `${safeName}_Evaluation.pdf`);
     
     const adminEmail = "elmer@bon.com.sa";
@@ -558,20 +504,17 @@ function apiSendEvaluationEmail(traineeEmail, trainerEmail, traineeName, evalTyp
        ccList.push(trainerEmail);
     }
     
-    const subject = `Evaluation Report: ${traineeName} - ${evalType}`;
-    const htmlBody = `
-      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px;">
-        <h2 style="color: #ea580c; margin-top: 0;">Evaluation Completed</h2>
-        <p>The performance evaluation for <strong>${traineeName}</strong> has been successfully submitted.</p>
-        <p>A PDF copy is attached.</p>
-      </div>
-    `;
-    
     MailApp.sendEmail({
       to: traineeEmail,
       cc: ccList.join(","),
-      subject: subject,
-      htmlBody: htmlBody,
+      subject: `Evaluation Report: ${traineeName} - ${evalType}`,
+      htmlBody: `
+        <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <h2 style="color: #ea580c; margin-top: 0;">Evaluation Completed</h2>
+          <p>The performance evaluation for <strong>${traineeName}</strong> has been successfully submitted.</p>
+          <p>A PDF copy is attached.</p>
+        </div>
+      `,
       attachments: [blob],
       name: APP_NAME
     });
@@ -581,19 +524,15 @@ function apiSendEvaluationEmail(traineeEmail, trainerEmail, traineeName, evalTyp
   }
 }
 
-// --- API: Send Combined Email (NEW for Dashboard) ---
 function apiSendCombinedEmail(id1, id2, traineeEmail, trainerEmail, traineeName) {
   try {
     if (!traineeEmail || !String(traineeEmail).includes("@")) {
       return { success: false, message: "Invalid trainee email." };
     }
-
     const reportData = apiGetCombinedReport(id1, id2);
     if (!reportData || !reportData.base64) {
       return { success: false, message: "Could not generate combined report." };
     }
-
-    // FIX: Clean filename to prevent MailApp crashes with Arabic/Special characters
     const safeName = String(traineeName).replace(/[^a-zA-Z0-9]/g, '_');
     const blob = Utilities.newBlob(Utilities.base64Decode(reportData.base64), "application/pdf", `${safeName}_Overall_Report.pdf`);
 
@@ -618,7 +557,6 @@ function apiGetReport(responseId) {
   const ss = getSpreadsheet();
   const rSheet = ss.getSheetByName("Responses");
   const cSheet = ss.getSheetByName("Config");
-  
   const rData = rSheet.getDataRange().getValues();
   const cData = cSheet.getDataRange().getValues();
   
@@ -629,7 +567,6 @@ function apiGetReport(responseId) {
   
   const headers = rData[0];
   const row = rData.find(r => safeString(r[0]) === safeString(responseId));
-  
   if(!row) throw new Error("Report not found");
   
   const formData = {
@@ -651,7 +588,6 @@ function apiGetReport(responseId) {
   for(let j=11; j<headers.length; j++) {
      const qText = headers[j];
      if (qText === "Trainee Email") continue;
-
      const ans = safeString(row[j]);
      if(qText && ans !== "") {
        formData.details.push({
@@ -670,7 +606,6 @@ function apiGetCombinedReport(id1, id2) {
   const ss = getSpreadsheet();
   const rSheet = ss.getSheetByName("Responses");
   const cSheet = ss.getSheetByName("Config");
-
   const rData = rSheet.getDataRange().getValues();
   const cData = cSheet.getDataRange().getValues();
 
@@ -681,10 +616,11 @@ function apiGetCombinedReport(id1, id2) {
 
   const row1 = id1 ? rData.find(r => safeString(r[0]) === safeString(id1)) : null;
   const row2 = id2 ? rData.find(r => safeString(r[0]) === safeString(id2)) : null;
-  
   if (!row1 && !row2) throw new Error("No data found.");
   
   const headers = rData[0];
+  const emailIndex = headers.indexOf("Trainee Email");
+
   const extract = (row) => {
     if(!row) return {};
     const obj = {};
@@ -696,15 +632,17 @@ function apiGetCombinedReport(id1, id2) {
   
   const d1 = extract(row1);
   const d2 = extract(row2);
-  
   const base = row2 || row1; 
   const info = {
     traineeName: safeString(base[2]),
     traineeId: safeString(base[1]),
     position: safeString(base[4]),
     trainerName: safeString(base[5]),
+    trainer1: row1 ? safeString(row1[5]) : null,
+    trainer2: row2 ? safeString(row2[5]) : null,
     branch: safeString(base[6]),
     area: safeString(base[6]),
+    email: emailIndex > -1 ? safeString(base[emailIndex]) : "",
     grade1: row1 ? safeString(row1[8]) : "-",
     grade2: row2 ? safeString(row2[8]) : "-",
     date1: row1 ? safeString(row1[9]) : null,
@@ -715,7 +653,6 @@ function apiGetCombinedReport(id1, id2) {
   const validGrades = ["A+", "A", "B", "C", "D"];
   const grouped = {};
   const notes = [];
-  
   const allQs = new Set([...Object.keys(d1), ...Object.keys(d2)]);
   
   allQs.forEach(q => {
@@ -729,7 +666,6 @@ function apiGetCombinedReport(id1, id2) {
      } else {
         let cleanQ = q;
         if (cleanQ.indexOf("|") !== -1) cleanQ = cleanQ.split("|")[0].trim();
-
         if(a1 && a1 !== "-") notes.push(`(1st Half) ${cleanQ}: ${a1}`);
         if(a2 && a2 !== "-") notes.push(`(2nd Half) ${cleanQ}: ${a2}`);
      }
@@ -752,10 +688,7 @@ function apiRequestEdit(responseId, trainerName, reason) {
   if (existing) throw new Error("A request is already pending for this evaluation.");
   
   const requestId = Utilities.getUuid();
-  const traineeName = row[2];
-  const evalType = row[3];
-  
-  reqSheet.appendRow([requestId, responseId, trainerName, traineeName, evalType, reason, "Pending", new Date().toISOString()]);
+  reqSheet.appendRow([requestId, responseId, trainerName, row[2], row[3], reason, "Pending", new Date().toISOString()]);
   return true;
 }
 
@@ -779,7 +712,6 @@ function apiGetRequests(role, userName) {
   if (role !== 'ADMIN') {
     list = list.filter(r => String(r.trainerName).trim() === String(userName).trim());
   }
-  
   return list.reverse();
 }
 
@@ -801,32 +733,24 @@ function apiProcessRequest(reqId, action) {
   }
   
   if (reqRowIndex === -1) throw new Error("Request not found.");
-  
   reqSheet.getRange(reqRowIndex, 7).setValue(action);
   
   if (action === "Approved") {
      const respData = respSheet.getDataRange().getValues();
      let respRowIndex = -1;
-     
      for(let i=1; i<respData.length; i++) {
         if (safeString(respData[i][0]) === safeString(responseId)) {
            respRowIndex = i + 1;
            break;
         }
      }
-     
-     if (respRowIndex !== -1) {
-        respSheet.deleteRow(respRowIndex);
-     }
+     if (respRowIndex !== -1) respSheet.deleteRow(respRowIndex);
   }
-  
   return true;
 }
 
-// --- PDF Helpers ---
-
 function getLogoBase64() {
-  let logoBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="; 
+  let logoBase64 = ""; 
   try {
      const fileId = "1jt2wAX-UNVtu_rDivmeyOAa2TPwg6OrE";
      const blob = DriveApp.getFileById(fileId).getBlob();
@@ -851,17 +775,12 @@ function calculateOverall(g1, g2) {
   const map = { "A+": 100, "A": 90, "B": 80, "C": 70, "D": 60 };
   let s1 = map[g1];
   let s2 = map[g2];
-  
   let count = 0;
   let sum = 0;
-  
   if (s1 !== undefined) { sum += s1; count++; }
   if (s2 !== undefined) { sum += s2; count++; }
-  
   if (count === 0) return "-";
-  
   const avg = sum / count;
-  
   if (avg >= 98) return "A+";
   if (avg >= 90) return "A";
   if (avg >= 80) return "B";
@@ -910,18 +829,25 @@ function createDriveFiles(data, ts, saveToDrive = true) {
     }
   });
   
-  // Calculate score for this single report
   data.score = calculateNumericScore(allGrades);
-
   const categories = Object.keys(gradedByCat).sort();
   const gMeta = getGradeMeta(data.overallGrade);
 
   let tableRows = "";
   if (categories.length > 0) {
     categories.forEach(cat => {
+       let catEng = cat;
        let catAr = "";
-       try { catAr = LanguageApp.translate(cat, 'en', 'ar'); } catch(e) {}
-       tableRows += `<tr class="cat-row"><td colspan="2">${escapeHtml(cat)} <span style="font-weight:normal; font-size: 7pt; float: right; direction: rtl;">${escapeHtml(catAr)}</span></td><td></td></tr>`;
+       
+       if (cat.indexOf('|') !== -1) {
+           const parts = cat.split('|');
+           catEng = parts[0].trim();
+           catAr = parts[1].trim();
+       } else {
+           try { catAr = LanguageApp.translate(catEng, 'en', 'ar'); } catch(e) {}
+       }
+
+       tableRows += `<tr class="cat-row"><td colspan="2">${escapeHtml(catEng)} <span style="font-weight:normal; font-size: 7pt; float: right; direction: rtl;">${escapeHtml(catAr)}</span></td><td></td></tr>`;
        gradedByCat[cat].forEach(item => {
           let color = "#1e293b"; 
           if(item.answer.includes('A')) color = "#14532d"; 
@@ -931,7 +857,6 @@ function createDriveFiles(data, ts, saveToDrive = true) {
           
           let qText = item.question;
           let qAr = "";
-          
           if (qText.indexOf('|') !== -1) {
               const parts = qText.split('|');
               qText = parts[0].trim();
@@ -939,7 +864,6 @@ function createDriveFiles(data, ts, saveToDrive = true) {
           } else {
               try { qAr = LanguageApp.translate(qText, 'en', 'ar'); } catch(e) {}
           }
-
           tableRows += `<tr><td class="q-cell">${escapeHtml(qText)}</td><td class="q-cell-ar" style="text-align: right; direction: rtl;">${escapeHtml(qAr)}</td><td class="a-cell" style="color: ${color};">${escapeHtml(item.answer)}</td></tr>`;
        });
     });
@@ -965,9 +889,107 @@ function createDriveFiles(data, ts, saveToDrive = true) {
 }
 
 function createCombinedPdf(info, grouped, notes, d1, d2) {
-  // Simple combined PDF generation logic placeholder
-  // In a real scenario, this would be similar to createDriveFiles but aggregating d1 and d2
-  const html = `<!DOCTYPE html><html><body><h1>Combined Report</h1><p>${info.traineeName}</p><p>Overall: ${info.overallGrade}</p></body></html>`;
+  const logoBase64 = getLogoBase64();
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  
+  // Calculate scores
+  const s1 = calculateNumericScore(Object.values(d1));
+  const s2 = calculateNumericScore(Object.values(d2));
+  
+  // Calculate combined score average for display
+  let combinedSum = 0;
+  let combinedCount = 0;
+  if (s1 > 0) { combinedSum += s1; combinedCount++; }
+  if (s2 > 0) { combinedSum += s2; combinedCount++; }
+  const finalScore = combinedCount > 0 ? Math.round(combinedSum / combinedCount) : 0;
+
+  const data = {
+    traineeName: info.traineeName,
+    traineeId: info.traineeId,
+    position: info.position,
+    area: info.area,
+    email: info.email,
+    overallGrade: info.overallGrade,
+    score1: s1,
+    score2: s2,
+    score: finalScore, // Pass the combined score to the template
+    trainer1: info.trainer1,
+    trainer2: info.trainer2,
+    evaluationType: "Performance of the Month"
+  };
+
+  const gMeta = getGradeMeta(data.overallGrade);
+  const categories = Object.keys(grouped).sort();
+
+  let tableRows = "";
+  if (categories.length > 0) {
+    categories.forEach(cat => {
+       let catEng = cat;
+       let catAr = "";
+       
+       if (cat.indexOf('|') !== -1) {
+           const parts = cat.split('|');
+           catEng = parts[0].trim();
+           catAr = parts[1].trim();
+       } else {
+           try { catAr = LanguageApp.translate(catEng, 'en', 'ar'); } catch(e) {}
+       }
+       tableRows += `<tr class="cat-row"><td colspan="2">${escapeHtml(catEng)} <span style="font-weight:normal; font-size: 7pt; float: right; direction: rtl;">${escapeHtml(catAr)}</span></td><td></td><td></td></tr>`;
+       
+       grouped[cat].forEach(item => {
+          const getColor = (g) => {
+             if(!g) return "#1e293b";
+             if(g.includes('A')) return "#14532d"; 
+             if(g === 'B') return "#854d0e"; 
+             if(g === 'C') return "#9a3412"; 
+             if(g === 'D') return "#7f1d1d";
+             return "#1e293b";
+          };
+
+          let qText = item.q;
+          let qAr = "";
+          
+          if (qText.indexOf('|') !== -1) {
+              const parts = qText.split('|');
+              qText = parts[0].trim();
+              qAr = parts[1].trim();
+          } else {
+              try { qAr = LanguageApp.translate(qText, 'en', 'ar'); } catch(e) {}
+          }
+
+          tableRows += `<tr>
+             <td class="q-cell">${escapeHtml(qText)}</td>
+             <td class="q-cell-ar" style="text-align: right; direction: rtl;">${escapeHtml(qAr)}</td>
+             <td class="a-cell" style="color: ${getColor(item.a1)};">${escapeHtml(item.a1)}</td>
+             <td class="a-cell" style="color: ${getColor(item.a2)};">${escapeHtml(item.a2)}</td>
+          </tr>`;
+       });
+    });
+  } else {
+    tableRows = `<tr><td colspan="4" style="text-align:center; padding: 20px; color:#64748b;">No graded performance criteria available.</td></tr>`;
+  }
+
+  let notesHtmlContent = "";
+  if (notes.length > 0) {
+     notesHtmlContent += `<table class="notes-table">`;
+     notes.forEach(n => {
+        notesHtmlContent += `<tr><td style="padding:2px;">${escapeHtml(n)}</td></tr>`;
+     });
+     notesHtmlContent += `</table>`;
+  } else {
+    notesHtmlContent = `<div style="padding:10px; color:#94a3b8; font-style:italic; font-size: 7pt;">No additional comments recorded.</div>`;
+  }
+
+  let displayTrainer = info.trainerName;
+  if (info.trainer1 && info.trainer2 && info.trainer1 !== info.trainer2) {
+     displayTrainer = `${info.trainer1} & ${info.trainer2}`;
+  } else if (info.trainer1 && !info.trainer2) {
+     displayTrainer = info.trainer1;
+  } else if (!info.trainer1 && info.trainer2) {
+     displayTrainer = info.trainer2;
+  }
+
+  const html = getHtmlTemplate(logoBase64, data, displayTrainer, info.branch, dateStr, gMeta, tableRows, notesHtmlContent, "Result", 4);
   return generatePdfBlob(html, info.traineeId, info.trainerName, info.branch, false);
 }
 
@@ -985,9 +1007,19 @@ function getHtmlTemplate(logo, data, trainerName, branchName, dateStr, gMeta, ta
      return "";
   };
   
-  const typeText = colCount === 4 
-    ? "Overall Performance of the Month" 
-    : (data.evaluationType ? String(data.evaluationType).replace(" Evaluation", "") + " Performance of the Month" : "Performance Report");
+  let typeText = "Performance Report";
+  if (colCount === 4) {
+      typeText = "Performance of the Month | تقييم أداء الشهر";
+  } else {
+      const et = data.evaluationType ? String(data.evaluationType).replace(" Evaluation", "") : "";
+      if (et.indexOf("1st") !== -1) {
+          typeText = "1st Half Performance | تقييم النصف الأول";
+      } else if (et.indexOf("2nd") !== -1) {
+          typeText = "2nd Half Performance | تقييم النصف الثاني";
+      } else {
+          typeText = et + " Performance";
+      }
+  }
 
   const legendHtml = `
     <table class="legend-table">
@@ -999,13 +1031,20 @@ function getHtmlTemplate(logo, data, trainerName, branchName, dateStr, gMeta, ta
     </table>
   `;
   
-  // Header Row with Scores included for Combined Report
   const headerRow = colCount === 4 
     ? `<tr>
          <th width="40%">Evaluation Criterion</th>
          <th width="30%" style="text-align:right;">معايير التقييم</th>
-         <th width="15%" style="text-align:center;">1st Half ${data.score1 ? `<br><span style="font-size:7pt;font-weight:normal;">(${data.score1}%)</span>` : ''}</th>
-         <th width="15%" style="text-align:center;">2nd Half ${data.score2 ? `<br><span style="font-size:7pt;font-weight:normal;">(${data.score2}%)</span>` : ''}</th>
+         <th width="15%" style="text-align:center;">
+            1st Half 
+            ${data.score1 ? `<br><span style="font-size:7pt;font-weight:normal;">(${data.score1}%)</span>` : ''}
+            ${data.trainer1 ? `<br><span style="font-size:5pt;font-weight:normal;color:#475569;">${escapeHtml(data.trainer1)}</span>` : ''}
+         </th>
+         <th width="15%" style="text-align:center;">
+            2nd Half 
+            ${data.score2 ? `<br><span style="font-size:7pt;font-weight:normal;">(${data.score2}%)</span>` : ''}
+            ${data.trainer2 ? `<br><span style="font-size:5pt;font-weight:normal;color:#475569;">${escapeHtml(data.trainer2)}</span>` : ''}
+         </th>
        </tr>`
     : `<tr>
          <th width="45%">Evaluation Criterion</th>
@@ -1013,7 +1052,7 @@ function getHtmlTemplate(logo, data, trainerName, branchName, dateStr, gMeta, ta
          <th width="15%" style="text-align:center;">Result</th>
        </tr>`;
 
-  const emailHtml = data.email ? `<span class="lbl">Email</span><span class="val">${escapeHtml(data.email)}</span>` : "";
+  const emailHtml = data.email ? `<span class="lbl">Email | البريد الإلكتروني</span><span class="val">${escapeHtml(data.email)}</span>` : "";
 
   return `
     <!DOCTYPE html>
@@ -1068,15 +1107,15 @@ function getHtmlTemplate(logo, data, trainerName, branchName, dateStr, gMeta, ta
         <table class="summary-table">
           <tr>
             <td class="summary-cell">
-               <span class="lbl">Trainee</span><span class="val" style="font-size: 12pt; font-weight: bold;">${escapeHtml(data.traineeName)}</span>
-               <span class="lbl">ID Number</span><span class="val">${escapeHtml(data.traineeId)}</span>
+               <span class="lbl">Trainee | المتدرب</span><span class="val" style="font-size: 12pt; font-weight: bold;">${escapeHtml(data.traineeName)}</span>
+               <span class="lbl">ID Number | الرقم الوظيفي</span><span class="val">${escapeHtml(data.traineeId)}</span>
                ${emailHtml}
-               <span class="lbl">Position</span><span class="val">${escapeHtml(data.position)}</span>
+               <span class="lbl">Position | المسمى الوظيفي</span><span class="val">${escapeHtml(data.position)}</span>
             </td>
             <td class="summary-cell">
-               <span class="lbl">Evaluated By</span><span class="val">${escapeHtml(trainerName)}</span>
-               <span class="lbl">Branch / Area</span><span class="val">${escapeHtml(branchName)} / ${escapeHtml(data.area)}</span>
-               <span class="lbl">Evaluation Type</span><span class="val" style="background-color: #fef08a; color: #854d0e; padding: 2px 5px; border-radius: 4px; display: inline-block;">${escapeHtml(typeText)}</span>
+               <span class="lbl">Evaluated By | المقيم</span><span class="val">${escapeHtml(trainerName)}</span>
+               <span class="lbl">Branch / Area | الفرع / المنطقة</span><span class="val">${escapeHtml(branchName)} / ${escapeHtml(data.area)}</span>
+               <span class="lbl">Evaluation Type | نوع التقييم</span><span class="val" style="background-color: #fef08a; color: #854d0e; padding: 2px 5px; border-radius: 4px; display: inline-block;">${typeText}</span>
             </td>
             <td class="summary-cell grade-box" style="background: ${getGradeColor(data.overallGrade)}">
                <div style="font-size: 24pt; font-weight: 800; line-height: 1;">${escapeHtml(data.overallGrade)}</div>
@@ -1145,7 +1184,6 @@ function getHtmlTemplate(logo, data, trainerName, branchName, dateStr, gMeta, ta
 function generatePdfBlob(html, id, trainer, branch, saveToDrive) {
   const safeName = (name) => String(name).replace(/[^a-zA-Z0-9]/g, '_');
   const fileName = `Report-${safeName(id)}-${safeName(trainer)}.pdf`;
-  
   let base64 = "";
   let pdfBlob = null;
   
@@ -1168,7 +1206,6 @@ function generatePdfBlob(html, id, trainer, branch, saveToDrive) {
       url = pdfFile.getUrl();
     } catch(e) { console.warn("Drive Save Error: " + e.message); }
   }
-  
   return { url: url, base64: base64 };
 }
 
@@ -1197,17 +1234,14 @@ function apiGetDashboardStats() {
   const ss = getSpreadsheet();
   const qSheet = ss.getSheetByName("Config");
   const rSheet = ss.getSheetByName("Responses");
-  
-  // NEW: Read FT Database for Total TM count
+  const reqSheet = ss.getSheetByName("Requests"); 
   const ftSheet = ss.getSheetByName("FT Database");
   const ftData = ftSheet.getDataRange().getValues();
   
-  // Map Trainer Name -> TM Count
   const trainerTMs = {};
-  // Skip header (row 0)
   if (ftData.length > 1) {
      for(let i=1; i<ftData.length; i++) {
-        const tName = safeString(ftData[i][0]); // Trainer Name is Col 0
+        const tName = safeString(ftData[i][0]);
         if(tName) {
            trainerTMs[tName] = (trainerTMs[tName] || 0) + 1;
         }
@@ -1216,6 +1250,18 @@ function apiGetDashboardStats() {
 
   const qData = qSheet.getDataRange().getValues();
   const rData = rSheet.getDataRange().getValues();
+  
+  // Requests Data for counting per trainer
+  const reqData = reqSheet.getDataRange().getValues();
+  const trainerRequests = {};
+  if (reqData.length > 1) {
+     for(let i=1; i<reqData.length; i++) {
+        const tName = safeString(reqData[i][2]); // Trainer Name is at index 2
+        if(tName) {
+           trainerRequests[tName] = (trainerRequests[tName] || 0) + 1;
+        }
+     }
+  }
   
   const questionTextToCategory = {};
   if (qData.length > 1) {
@@ -1234,11 +1280,7 @@ function apiGetDashboardStats() {
   const headers = rData.length > 0 ? rData[0] : [];
   const emailIndex = headers.indexOf("Trainee Email");
   
-  // Trainer Stats Aggregation Object
   const trainerStats = {};
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
   
   if (rData.length > 1) {
     for (let i = 1; i < rData.length; i++) {
@@ -1250,37 +1292,44 @@ function apiGetDashboardStats() {
       
       totalScore += (gradeScores[grade] || 0);
       
-      // --- START TRAINER AGGREGATION ---
       const tName = safeString(r[5]);
       if(tName) {
          if(!trainerStats[tName]) {
             trainerStats[tName] = {
-               total: 0,
+               totalEvaluations: 0,
                branches: new Set(),
                firstHalf: 0,
                days: new Set(),
-               monthlyTrainees: {} // TraineeID -> Set of Types
+               employees: new Set(), // Unique Trainee IDs
+               uniqueTLs: new Set(), // Team Leader IDs
+               uniqueTMs: new Set(), // Team Member IDs
+               completionMap: {} // Map[TraineeID] -> Set(EvalTypes)
             };
          }
          
          const entry = trainerStats[tName];
-         entry.total++; // Total Evaluations
-         if(r[6]) entry.branches.add(safeString(r[6])); // Branch
-         if(safeString(r[3]) === "1st Half") entry.firstHalf++; // Total 1st Half
+         entry.totalEvaluations++;
+         if(r[6]) entry.branches.add(safeString(r[6]));
+         if(safeString(r[3]) === "1st Half") entry.firstHalf++;
          
          if(r[9]) {
             const d = new Date(r[9]);
-            entry.days.add(d.toDateString()); // Unique Days
-            
-            // Monthly Completion Check
-            if(d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-               const tId = safeString(r[1]);
-               if(!entry.monthlyTrainees[tId]) entry.monthlyTrainees[tId] = new Set();
-               entry.monthlyTrainees[tId].add(safeString(r[3])); // Add Eval Type
-            }
+            entry.days.add(d.toDateString());
+         }
+
+         const tId = safeString(r[1]);
+         const pos = safeString(r[4]);
+         const evalType = safeString(r[3]);
+
+         if (tId) {
+             entry.employees.add(tId);
+             if (pos === 'Team Leader' || pos === 'TL') entry.uniqueTLs.add(tId);
+             else entry.uniqueTMs.add(tId);
+
+             if (!entry.completionMap[tId]) entry.completionMap[tId] = new Set();
+             entry.completionMap[tId].add(evalType);
          }
       }
-      // --- END TRAINER AGGREGATION ---
       
       let comments = [];
       let rowCatStats = {};
@@ -1290,7 +1339,6 @@ function apiGetDashboardStats() {
          const headerName = safeString(headers[j]); 
          
          if (!headerName || val === "") continue;
-
          if (headerName === "Trainee Email") continue;
 
          const cat = questionTextToCategory[headerName];
@@ -1346,23 +1394,25 @@ function apiGetDashboardStats() {
     }
   }
   
-  // Calculate Final Trainer Overview Array
   const trainerOverview = Object.keys(trainerStats).map(name => {
      const data = trainerStats[name];
-     // Calculate completed monthly (both halves)
-     let completedMonthly = 0;
-     Object.values(data.monthlyTrainees).forEach(set => {
-        if(set.has("1st Half") && set.has("2nd Half")) completedMonthly++;
+     
+     let totalComplete = 0;
+     Object.values(data.completionMap).forEach(set => {
+        if(set.has("1st Half") && set.has("2nd Half")) totalComplete++;
      });
      
      return {
         name: name,
-        totalTM: trainerTMs[name] || 0,
-        totalEvaluations: data.total,
+        totalTM: data.uniqueTMs.size, 
+        totalEvaluations: data.totalEvaluations, // Keeping for backward compat if needed, but not requested for display
         totalBranches: data.branches.size,
-        completedMonthly: completedMonthly,
+        completedMonthly: totalComplete, // Maps to "TotalComplete" requested
         totalFirstHalf: data.firstHalf,
-        totalDays: data.days.size
+        totalDays: data.days.size,
+        totalEmployees: data.employees.size,
+        totalTL: data.uniqueTLs.size,
+        totalRequests: trainerRequests[name] || 0
      };
   });
   
@@ -1383,6 +1433,6 @@ function apiGetDashboardStats() {
     distribution: distribution,
     categoryPerformance: categoryPerformance,
     list: list.reverse(),
-    trainerOverview: trainerOverview // Return new stats
+    trainerOverview: trainerOverview
   };
 }

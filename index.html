@@ -62,17 +62,7 @@
         .print\:flex { display: flex !important; }
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
-  }
-}
-</script>
-</head>
+  </head>
   <body class="bg-zinc-50 text-slate-900 font-sans h-screen flex flex-col overflow-hidden">
     
     <div id="root" class="h-full flex flex-col">
@@ -115,7 +105,7 @@
                 }`}>
                   <Icon name={t.type === 'error' ? 'alert-octagon' : t.type === 'warning' ? 'alert-triangle' : 'check-circle'} size={20} />
                   <span className="text-sm font-medium">{t.msg}</span>
-                  <button onClick={() => removeToast(t.id)} className="opacity-50 hover:opacity-100"><Icon name="x" size={16} /></button>
+                  <button type="button" onClick={() => removeToast(t.id)} className="opacity-50 hover:opacity-100"><Icon name="x" size={16} /></button>
                 </div>
               ))}
             </div>
@@ -211,6 +201,7 @@
           loading: "Loading Portal...",
           connecting: "Connecting to database...",
           portalTitle: "Field Training Portal",
+          companyName: "New Bon Cafe' Co. Ltd.",
           selectModule: "Select a module to continue",
           evalPortal: "Evaluation Portal",
           evalDesc: "Submit 1st & 2nd Half Evaluations",
@@ -271,12 +262,16 @@
           allow: "Allow",
           deny: "Deny",
           trainerOverview: "Trainer Performance Overview",
-          colTotalTM: "Total TM",
+          colTotalTM: "TM",
+          colTotalTL: "TL",
+          colTotalEmp: "Employees",
+          colTotalRequests: "Requests",
+          colTotalComplete: "Complete",
           colTotalEval: "Total Evals",
           colBranches: "Branches",
           colMonthlyComp: "Completed (Month)",
           col1stHalf: "1st Half",
-          colDays: "Active Days",
+          colDays: "Days",
           employees: "Employees Evaluated",
           kpiEmployees: "Total Employees",
           kpiAvg: "Avg Score",
@@ -324,32 +319,47 @@
           cancel: "Cancel",
           retake: "Retake",
           noCamera: "Camera not accessible",
-          updatePhotoSuccess: "Profile photo updated successfully!"
+          updatePhotoSuccess: "Profile photo updated successfully!",
+          selectBranch: "Select or type branch...",
+          selectEmail: "Select or type email...",
+          noOptions: "No options available",
+          noMatches: "No matches found (Type to create new)",
+          gradeApDesc: "Excellent, Consider for Mentorship",
+          gradeADesc: "Good, Maintain and Motivate",
+          gradeBDesc: "Continue routine supervision",
+          gradeCDesc: "Immediate coaching",
+          gradeDDesc: "Mandatory retraining & plan",
+          dateLabel: "Date: ",
+          chartsLoading: "Charts Loading...",
+          noTrainerData: "No trainer data available",
+          driveStatus: "Google Drive Status:",
+          clickSelectImage: "Click to select image",
+          noOptionsFound: "No options found"
         },
         ar: {
-          loading: "جاري تحميل البوابة...",
+          loading: "جاري التحميل...",
           connecting: "جاري الاتصال بقاعدة البيانات...",
           portalTitle: "بوابة التدريب الميداني",
           selectModule: "اختر وحدة للمتابعة",
           evalPortal: "بوابة التقييم",
           evalDesc: "تقديم تقييمات النصف الأول والثاني",
-          trainerTracker: "نظام تتبع المدرب",
-          trackerDesc: "لوحة المعلومات الشخصية",
+          trainerTracker: "متابع المدرب",
+          trackerDesc: "لوحة التحكم الشخصية",
           adminPortal: "بوابة الإدارة",
           adminDesc: "نظرة عامة على النظام",
-          welcomeBack: "مرحبًا بعودتك",
+          welcomeBack: "مرحباً بعودتك",
           restricted: "دخول مقيد",
           idNumber: "الرقم الوظيفي",
           password: "كلمة المرور",
-          login: "تسجيل الدخول",
+          login: "دخول",
           registerNew: "تسجيل حساب جديد",
           fullName: "الاسم الكامل",
-          position: "المنصب",
+          position: "المسمى الوظيفي",
           branch: "الفرع",
           email: "البريد الإلكتروني",
           register: "تسجيل",
           id4Digits: "الرقم الوظيفي (4 أرقام)",
-          regSuccess: "تم تقديم التسجيل للموافقة. سيقوم المسؤول بمراجعة طلبك.",
+          regSuccess: "تم إرسال طلب التسجيل للموافقة. سيقوم المسؤول بمراجعة طلبك.",
           evalForm: "نموذج التقييم",
           traineeInfo: "بيانات المتدرب والمدرب",
           traineeID: "رقم المتدرب",
@@ -365,85 +375,104 @@
           exceeds: "يفوق التوقعات",
           meets: "يلبي التوقعات",
           inconsistent: "غير ثابت",
-          unsatisfactory: "غير مرضي",
+          unsatisfactory: "غير مرضٍ",
           submit: "إرسال التقييم",
-          totalScore: "الدرجة الكلية",
+          totalScore: "المجموع الكلي",
           overallRating: "التقدير العام",
-          evalComplete: "اكتمل التقييم!",
+          evalComplete: "تم التقييم!",
           evalSaved: "تم حفظ التقييم بنجاح.",
           preview: "معاينة",
           download: "تحميل",
-          openDrive: "فتح في Drive",
+          openDrive: "فتح في درايف",
           evalAnother: "تقييم آخر",
-          dashboard: "لوحة المعلومات",
+          dashboard: "لوحة التحكم",
           printDash: "طباعة اللوحة",
           printTable: "طباعة الجدول",
-          showing: "عزض",
-          records: "متدرب",
+          showing: "عرض",
+          records: "سجلات",
           sn: "م",
-          grade: "التقدير",
-          comments: "ملاحظات",
+          grade: "الدرجة",
+          comments: "الملاحظات",
           requests: "الطلبات",
           pending: "قيد الانتظار",
-          approved: "مقبول",
+          approved: "موافق عليه",
           rejected: "مرفوض",
-          allow: "قبول",
+          allow: "سماح",
           deny: "رفض",
-          trainerOverview: "نظرة عامة للمدربين",
-          colTotalTM: "إجمالي الأعضاء",
-          colTotalEval: "إجمالي التقييمات",
+          trainerOverview: "نظرة عامة على أداء المدرب",
+          colTotalTM: "أعضاء",
+          colTotalTL: "قادة",
+          colTotalEmp: "موظفين",
+          colTotalRequests: "طلبات",
+          colTotalComplete: "مكتمل",
+          colTotalEval: "التقييمات",
           colBranches: "الفروع",
-          colMonthlyComp: "مكتمل (شهري)",
-          col1stHalf: "النصف الأول",
-          colDays: "أيام النشاط",
+          colMonthlyComp: "مكتمل (شهر)",
+          col1stHalf: "نصف أول",
+          colDays: "أيام",
           employees: "الموظفين المقيمين",
           kpiEmployees: "إجمالي الموظفين",
           kpiAvg: "متوسط الدرجات",
           kpiPos: "عضو | قائد",
-          kpiHalves: "نصف أول / ثاني",
+          kpiHalves: "نصف 1 | نصف 2",
           gradeDist: "توزيع الدرجات",
           catPerf: "أداء الفئات",
-          quickSelect: "اختيار سريع (شهر / سنة)",
+          quickSelect: "تحديد سريع (شهر / سنة)",
           dateRange: "نطاق التاريخ",
           filters: "تصفية",
           all: "الكل",
           year: "سنة",
           pendingReg: "تسجيلات معلقة",
           pendingEdit: "طلبات تعديل معلقة",
-          reasonDel: "سبب الحذف",
+          reasonDel: "سبب الحذف/التعديل",
           submitReq: "إرسال الطلب",
           reqTitle: "طلب حذف / تعديل",
           reqDesc: "أنت تطلب حذف هذا التقييم لإعادة إرساله. يتطلب موافقة المسؤول.",
-          logout: "خروج",
-          viewPdf: "ملف PDF",
+          logout: "تسجيل خروج",
+          viewPdf: "عرض PDF",
           loadingData: "جاري تحليل البيانات...",
-          noData: "لا توجد سجلات تطابق عوامل التصفية.",
+          noData: "لا توجد سجلات مطابقة.",
           idPlaceholder: "بحث...",
           adminOverview: "نظرة عامة للمسؤول",
-          myTracker: "تتبع الأداء الخاص بي",
-          viewingAdmin: "عرض البيانات لجميع المدربين والمتدربين عبر النظام.",
-          viewingTrainer: "عرض البيانات للمدرب: ",
+          myTracker: "متابعة أدائي",
+          viewingAdmin: "عرض البيانات لجميع المدربين والمتدربين.",
+          viewingTrainer: "عرض بيانات المدرب: ",
           countBreakdown: "تفاصيل العدد",
-          forgotPass: "هل نسيت كلمة السر؟",
-          resetPass: "إعادة تعيين كلمة السر",
+          forgotPass: "نسيت كلمة المرور؟",
+          resetPass: "إعادة تعيين كلمة المرور",
           enterId: "أدخل الرقم الوظيفي",
           sendCode: "إرسال رمز التحقق",
           enterCode: "أدخل الرمز",
-          newPass: "كلمة المرور الجديدة",
+          newPass: "كلمة مرور جديدة",
           confirmPass: "تأكيد كلمة المرور",
           changePass: "تغيير كلمة المرور",
           codeSent: "تم إرسال الرمز إلى بريدك الإلكتروني!",
           passChanged: "تم تغيير كلمة المرور بنجاح! الرجاء تسجيل الدخول.",
-          codeInvalid: "رمز غير صحيح",
+          codeInvalid: "رمز غير صالح",
           changePhoto: "تغيير الصورة",
-          upload: "رفع",
+          upload: "رفع صورة",
           camera: "كاميرا",
           takePic: "التقاط صورة",
           save: "حفظ",
           cancel: "إلغاء",
-          retake: "إعادة التقاط",
+          retake: "إعادة",
           noCamera: "الكاميرا غير متاحة",
-          updatePhotoSuccess: "تم تحديث الصورة الشخصية بنجاح!"
+          updatePhotoSuccess: "تم تحديث الصورة الشخصية بنجاح!",
+          selectBranch: "اختر أو اكتب الفرع...",
+          selectEmail: "اختر أو اكتب البريد...",
+          noOptions: "لا توجد خيارات",
+          noMatches: "لا توجد نتائج (اكتب لإضافة جديد)",
+          gradeApDesc: "ممتاز، يُرشح للإرشاد والتوجيه",
+          gradeADesc: "جيد، الحفاظ عليه وتحفيزه",
+          gradeBDesc: "الاستمرار في الإشراف الروتيني",
+          gradeCDesc: "توجيه وتدريب فوري",
+          gradeDDesc: "إعادة تدريب إلزامية مع خطة",
+          dateLabel: "التاريخ: ",
+          chartsLoading: "جاري تحميل الرسوم البيانية...",
+          noTrainerData: "لا توجد بيانات للمدرب",
+          driveStatus: "حالة جوجل درايف:",
+          clickSelectImage: "اضغط لاختيار صورة",
+          noOptionsFound: "لا توجد خيارات"
         }
       };
 
@@ -470,15 +499,17 @@
         // Reg Request Admin APIs
         getRegistrationRequests: () => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiGetRegistrationRequests()),
         processRegistration: (reqId, action) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiProcessRegistration(reqId, action)),
-        // Send Email API (Modified to accept responseId)
-        sendEmail: (to, trainerEmail, name, type, responseId) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiSendEvaluationEmail(to, trainerEmail, name, type, responseId)),
-        // Send Combined Email (New)
+        // Send Email API
+        sendEmail: (to, trainerEmail, name, type, pdf) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiSendEvaluationEmail(to, trainerEmail, name, type, pdf)),
+        // Send Combined Email
         sendCombinedEmail: (id1, id2, to, trainerEmail, name) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiSendCombinedEmail(id1, id2, to, trainerEmail, name)),
         // Password Reset APIs
         requestPasswordReset: (id) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiRequestPasswordReset(id)),
         resetPassword: (id, otp, newPass) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiResetPassword(id, otp, newPass)),
         // Image Update
-        updateUserImage: (id, base64) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiUpdateUserImage(id, base64))
+        updateUserImage: (id, base64) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiUpdateUserImage(id, base64)),
+        // Get Logo
+        getLogo: () => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).apiGetLogo())
       };
 
       // --- Icons Helper ---
@@ -544,6 +575,78 @@
         </div>
       );
 
+      const Combobox = ({ label, value, onChange, options, placeholder, required }) => {
+        const [isOpen, setIsOpen] = useState(false);
+        const { t, lang } = useTranslation();
+        const containerRef = useRef(null);
+
+        // Filter options based on current value
+        const filteredOptions = options.filter(o => 
+           !value || String(o).toLowerCase().includes(String(value).toLowerCase())
+        );
+
+        const handleSelect = (val) => {
+           onChange({ target: { value: val } });
+           setIsOpen(false);
+        };
+
+        useEffect(() => {
+           const handleClickOutside = (event) => {
+             if (containerRef.current && !containerRef.current.contains(event.target)) {
+               setIsOpen(false);
+             }
+           };
+           document.addEventListener("mousedown", handleClickOutside);
+           return () => document.removeEventListener("mousedown", handleClickOutside);
+        }, [containerRef]);
+
+        return (
+          <div className="mb-4 relative" ref={containerRef}>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+            <div className="relative">
+               <input
+                  type="text"
+                  className={`w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white ${lang === 'ar' ? 'pl-8' : 'pr-8'}`}
+                  value={value}
+                  onChange={(e) => { onChange(e); setIsOpen(true); }}
+                  onFocus={() => setIsOpen(true)}
+                  placeholder={placeholder}
+                  required={required}
+                  autoComplete="off"
+               />
+               <button 
+                  type="button"
+                  onClick={() => setIsOpen(!isOpen)}
+                  className={`absolute top-0 h-full px-2 text-gray-400 hover:text-gray-600 flex items-center justify-center ${lang === 'ar' ? 'left-0' : 'right-0'}`}
+                  tabIndex={-1}
+               >
+                  <Icon name="chevron-down" size={16} />
+               </button>
+            </div>
+            
+            {isOpen && (
+              <div className="absolute z-50 w-full mt-1 bg-white border border-zinc-200 rounded-lg shadow-xl max-h-60 overflow-y-auto animate-fade">
+                 {filteredOptions.length > 0 ? (
+                    filteredOptions.map((opt, i) => (
+                       <div 
+                          key={i} 
+                          className="px-4 py-2 hover:bg-orange-50 cursor-pointer text-sm text-slate-700 border-b border-zinc-50 last:border-none"
+                          onClick={() => handleSelect(opt)}
+                       >
+                          {opt}
+                       </div>
+                    ))
+                 ) : (
+                    <div className="px-4 py-2 text-sm text-gray-400 italic">
+                        {options.length === 0 ? t('noOptions') : t('noMatches')}
+                    </div>
+                 )}
+              </div>
+            )}
+          </div>
+        );
+      };
+
       const MultiSelect = ({ label, options, selected, onChange }) => {
         const { t } = useTranslation();
         const [isOpen, setIsOpen] = useState(false);
@@ -598,7 +701,7 @@
                        <input type="checkbox" checked={selected.includes(opt)} readOnly className="rounded text-orange-600 focus:ring-orange-500 pointer-events-none" />
                        <span className="truncate">{opt}</span>
                      </div>
-                   )) : <div className="p-3 text-xs text-gray-400 text-center">No options found</div>}
+                   )) : <div className="p-3 text-xs text-gray-400 text-center">{t('noOptionsFound')}</div>}
                 </div>
               </div>
             )}
@@ -659,7 +762,6 @@
            const file = e.target.files[0];
            if (file) {
               try {
-                  // Resize BEFORE showing preview to save memory
                   const resized = await resizeImage(file, 800);
                   setPreview(resized);
               } catch(e) {
@@ -686,12 +788,7 @@
            if (!preview) return;
            setLoading(true);
            try {
-              // Ensure we send a resized string to the backend
-              const res = await fetch(preview);
-              const blob = await res.blob();
-              const finalBase64 = await resizeImage(blob, 1000); // 1000px max
-              
-              await onSave(finalBase64);
+              await onSave(preview);
               onClose();
            } catch(e) {
               alert(e.message);
@@ -717,7 +814,7 @@
                  {mode === 'UPLOAD' && !preview && (
                     <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-gray-400 hover:text-orange-500 transition-colors">
                        <Icon name="image-plus" size={48} />
-                       <span className="text-xs mt-2 font-medium">Click to select image</span>
+                       <span className="text-xs mt-2 font-medium">{t('clickSelectImage')}</span>
                        <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
                     </label>
                  )}
@@ -863,13 +960,38 @@
 
       const Landing = ({ onSelect }) => {
         const { t } = useTranslation();
+        const [logo, setLogo] = useState(null);
+        const [loadingLogo, setLoadingLogo] = useState(true);
+
+        useEffect(() => {
+           server.getLogo()
+             .then(img => {
+                setLogo(img);
+                setLoadingLogo(false);
+             })
+             .catch(e => {
+                console.log("Logo load failed", e);
+                setLoadingLogo(false);
+             });
+        }, []);
+
         return (
           <Layout title="" className="bg-zinc-950">
              <div className="flex flex-col items-center justify-center h-full">
               <div className="mb-12 animate-fade text-center max-w-2xl mx-auto">
-                <div className="inline-block p-4 bg-orange-600/10 rounded-full mb-6 border border-orange-600/20 backdrop-blur-sm">
-                  <Icon name="layout-grid" size={48} className="text-orange-500" />
-                </div>
+                {loadingLogo ? (
+                   <div className="h-32 flex items-center justify-center mb-8">
+                      <div className="loader loader-primary w-8 h-8"></div>
+                   </div>
+                ) : logo ? (
+                   <div className="mb-8 flex justify-center">
+                      <img src={logo} alt="Company Logo" className="h-32 object-contain drop-shadow-2xl" />
+                   </div>
+                ) : (
+                    <div className="inline-block p-4 bg-orange-600/10 rounded-full mb-6 border border-orange-600/20 backdrop-blur-sm">
+                      <Icon name="layout-grid" size={48} className="text-orange-500" />
+                    </div>
+                )}
                 <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight">{t('portalTitle')}</h1>
                 <p className="text-zinc-400 text-lg">{t('selectModule')}</p>
               </div>
@@ -1064,7 +1186,7 @@
       };
 
       const EvaluationForm = ({ user, onLogout }) => {
-        const { t } = useTranslation();
+        const { t, lang } = useTranslation();
         const { addToast } = useToast();
         const [loading, setLoading] = useState(true);
         const [db, setDb] = useState([]);
@@ -1080,27 +1202,31 @@
         const [branchOptions, setBranchOptions] = useState([]);
         
         const [pdfResult, setPdfResult] = useState(null);
-        const [sendingEmail, setSendingEmail] = useState(false);
-        const [emailStatus, setEmailStatus] = useState(null);
-        const [resultId, setResultId] = useState(null);
 
         const gradeMeta = {
-          "A+": { text: "Excellent, Consider for Mentorship", stars: "⭐⭐⭐⭐⭐" },
-          "A":  { text: "Good, Maintain and Motivate", stars: "⭐⭐⭐⭐" },
-          "B":  { text: "Continue routine supervision", stars: "⭐⭐⭐" },
-          "C":  { text: "Immediate coaching", stars: "⭐⭐" },
-          "D":  { text: "Mandatory retraining & plan", stars: "⭐" },
-          "-":  { text: "Pending", stars: "" }
+          "A+": { text: t('gradeApDesc'), stars: "⭐⭐⭐⭐⭐" },
+          "A":  { text: t('gradeADesc'), stars: "⭐⭐⭐⭐" },
+          "B":  { text: t('gradeBDesc'), stars: "⭐⭐⭐" },
+          "C":  { text: t('gradeCDesc'), stars: "⭐⭐" },
+          "D":  { text: t('gradeDDesc'), stars: "⭐" },
+          "-":  { text: t('pending'), stars: "" }
         };
 
         useEffect(() => {
           Promise.all([server.getFTDatabase(), server.getQuestions()]).then(([d, q]) => {
-            setDb(d); setQs(q); setLoading(false);
+            setDb(d); 
+            setQs(q); 
+            
+            // Extract all branches for the datalist, sorted
+            const allBranches = [...new Set(d.map(r => r.branch).filter(Boolean))].sort();
+            setBranchOptions(allBranches);
+            
+            setLoading(false);
           });
           
           if (user) {
              setForm(f => ({...f, trainerName: user.name}));
-             if(user.branch) setForm(f => ({...f, branch: user.branch}));
+             // Default branch setting removed to ensure manual selection
           }
         }, []);
         
@@ -1112,18 +1238,6 @@
            });
            setTraineeOptions(Array.from(map.entries()).map(([id, name]) => ({ id, name })));
         }, [db]);
-
-        useEffect(() => {
-            if (!form.trainerName || !db.length) return;
-            const trainerRows = db.filter(r => r.trainerName === form.trainerName);
-            const branches = [...new Set(trainerRows.map(r => r.branch).filter(Boolean))];
-            setBranchOptions(branches);
-
-            if (branches.length === 1 && form.branch !== branches[0]) {
-               const row = trainerRows.find(r => r.branch === branches[0]);
-               setForm(f => ({...f, branch: branches[0], teamLeader: row?.teamLeader||'', area: row?.area||''}));
-            }
-        }, [form.trainerName, db]);
 
         const handleIdChange = (e) => {
            const val = e.target.value;
@@ -1138,8 +1252,17 @@
 
         const handleBranchChange = (e) => {
            const b = e.target.value;
-           const row = db.find(r => r.trainerName === form.trainerName && r.branch === b);
-           setForm(f => ({...f, branch: b, teamLeader: row?.teamLeader||'', area: row?.area||''}));
+           
+           // Search db for any row with this branch to auto-fill TL and Area
+           // Logic modified to search globally, not restricted to the trainer
+           const row = db.find(r => r.branch === b);
+           
+           setForm(f => ({
+             ...f, 
+             branch: b, 
+             teamLeader: row?.teamLeader || '', 
+             area: row?.area || ''
+           }));
         };
 
         useEffect(() => {
@@ -1222,46 +1345,14 @@
           try { 
              const result = await server.submit(form); 
              setPdfResult(result);
-             setResultId(result.id); // Save ID for emailing
              addToast("Evaluation Submitted Successfully", 'success');
           }
           catch(e) { setAlertMsg({ type: 'error', msg: "Error: "+e.message }); }
           setSubmitting(false);
         };
 
-        const sendEmailToEmployee = async () => {
-            if (!form.email) {
-                setEmailStatus({ type: 'error', msg: "No email address found for trainee." });
-                return;
-            }
-            if (!resultId) {
-                setEmailStatus({ type: 'error', msg: "Save the evaluation first." });
-                return;
-            }
-            setSendingEmail(true);
-            setEmailStatus(null);
-            try {
-                // Modified to send ID instead of PDF
-                const res = await server.sendEmail(form.email, user.email, form.traineeName, form.evaluationType, resultId);
-                
-                if (res.success) {
-                    setEmailStatus({ type: 'success', msg: res.message });
-                    addToast(res.message, 'success');
-                } else {
-                    setEmailStatus({ type: 'error', msg: res.message });
-                }
-            } catch (e) {
-                setEmailStatus({ type: 'error', msg: "Connection error: " + e.message });
-            } finally {
-                setSendingEmail(false);
-            }
-        };
-
         const resetForm = () => {
             setPdfResult(null);
-            setResultId(null);
-            setSendingEmail(false);
-            setEmailStatus(null);
             setForm(f => ({ 
                ...f, 
                traineeId: '', 
@@ -1326,10 +1417,6 @@
                           <h2 className="text-2xl font-bold text-slate-800 mb-2">{t('evalComplete')}</h2>
                           <p className="text-slate-500 mb-6">{t('evalSaved')}</p>
                           
-                          {emailStatus && (
-                             <Alert type={emailStatus.type} message={emailStatus.msg} />
-                          )}
-
                           <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <button type="button" onClick={openPreview} className="w-full py-3 px-4 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 flex items-center justify-center gap-2 transition-colors shadow-sm">
@@ -1340,18 +1427,8 @@
                                 </button>
                             </div>
                             
-                            <button 
-                                type="button"
-                                onClick={sendEmailToEmployee} 
-                                disabled={sendingEmail || (emailStatus && emailStatus.type === 'success')}
-                                className="w-full py-3 px-4 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 flex items-center justify-center gap-2 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                               {sendingEmail ? <div className="loader w-5 h-5"></div> : <Icon name="mail" size={20}/>} 
-                               Send email to All
-                            </button>
-
                             <div className="text-sm bg-zinc-50 p-4 rounded-lg border border-zinc-200">
-                              <p className="text-slate-600 mb-1">Google Drive Status:</p>
+                              <p className="text-slate-600 mb-1">{t('driveStatus')}</p>
                               {pdfResult.url && !pdfResult.url.startsWith("Error") ? (
                                 <a href={pdfResult.url} target="_blank" className="text-orange-600 hover:text-orange-800 font-medium inline-flex items-center gap-1 break-all">
                                   {t('openDrive')} <Icon name="external-link" size={14} />
@@ -1398,7 +1475,7 @@
                                      {gradeMeta[statusData.first.grade]?.stars}
                                   </p>
                                   <p className="text-xs text-slate-500">
-                                     Date: {new Date(statusData.first.date).toLocaleDateString('en-GB')}
+                                     {t('dateLabel')} {new Date(statusData.first.date).toLocaleDateString('en-GB')}
                                   </p>
                                </div>
                             ) : (
@@ -1421,7 +1498,7 @@
                                      {gradeMeta[statusData.second.grade]?.stars}
                                   </p>
                                   <p className="text-xs text-slate-500">
-                                     Date: {new Date(statusData.second.date).toLocaleDateString('en-GB')}
+                                     {t('dateLabel')} {new Date(statusData.second.date).toLocaleDateString('en-GB')}
                                   </p>
                                </div>
                             ) : (
@@ -1436,7 +1513,7 @@
 
               {alertMsg && <Alert type={alertMsg.type} message={alertMsg.msg} />}
 
-              <Card title={t('traineeInfo')}>
+              <Card title={t('traineeInfo')} className="overflow-visible">
                 <div className="grid md:grid-cols-2 gap-4">
                    <div className="relative">
                      <label className="block text-sm font-medium text-slate-700 mb-1">{t('traineeID')}</label>
@@ -1467,9 +1544,9 @@
                             list="emailOptions"
                             className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none"
                             required
-                            placeholder="Select or type email..."
+                            placeholder={t('selectEmail')}
                          />
-                         <div className="absolute right-3 top-2.5 pointer-events-none text-gray-400">
+                         <div className={`absolute top-2.5 pointer-events-none text-gray-400 ${lang === 'ar' ? 'left-3' : 'right-3'}`}>
                             <Icon name="chevron-down" size={16} />
                          </div>
                        </div>
@@ -1487,12 +1564,13 @@
                    
                    <Input label={t('trainerName')} value={form.trainerName} readOnly className="bg-zinc-100 font-semibold text-slate-700" />
                    
-                   <Select 
+                   <Combobox 
                       label={t('branch')} 
                       value={form.branch} 
                       onChange={handleBranchChange} 
-                      options={branchOptions.map(b => ({ label: b, value: b }))} 
-                      required 
+                      options={branchOptions}
+                      placeholder={t('selectBranch')}
+                      required={true}
                    />
                 </div>
               </Card>
@@ -1561,32 +1639,25 @@
         const { addToast } = useToast();
         const { confirm } = useDialog();
         const [stats, setStats] = useState(null);
-        const [requests, setRequests] = useState([]); // Store pending edit requests
-        const [regRequests, setRegRequests] = useState([]); // Store pending REGISTRATION requests (Admin Only)
+        const [requests, setRequests] = useState([]); 
+        const [regRequests, setRegRequests] = useState([]);
         const [loading, setLoading] = useState(true);
         const [error, setError] = useState(null);
         const [viewingId, setViewingId] = useState(null);
-        const [sendingRow, setSendingRow] = useState(null); // Track which row is sending email
 
-        // Edit Modal State
         const [isEditModalOpen, setEditModalOpen] = useState(false);
-        const [editTarget, setEditTarget] = useState(null); // { responseId, type }
+        const [editTarget, setEditTarget] = useState(null);
         const [editReason, setEditReason] = useState("");
         const [isSubmittingRequest, setSubmittingRequest] = useState(false);
-
-        // Image Update State
         const [isImageModalOpen, setImageModalOpen] = useState(false);
 
-        // --- Filters State ---
         const [dateFrom, setDateFrom] = useState('');
         const [dateTo, setDateTo] = useState('');
         const [filterPosition, setFilterPosition] = useState('All');
         
-        // Multi-select Filters State
         const [selectedNames, setSelectedNames] = useState([]);
         const [selectedBranches, setSelectedBranches] = useState([]);
         const [selectedGrades, setSelectedGrades] = useState([]);
-        // Admin Only Filter
         const [selectedTrainers, setSelectedTrainers] = useState([]);
 
         const loadData = () => {
@@ -1614,10 +1685,9 @@
         };
 
         useEffect(() => { 
-          // Set Default Dates to Current Month (Timezone Safe)
           const now = new Date();
           const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-          const lastDayObj = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of current month
+          const lastDayObj = new Date(now.getFullYear(), now.getMonth() + 1, 0);
           const lastDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDayObj.getDate()).padStart(2, '0')}`;
           
           setDateFrom(firstDay);
@@ -1673,7 +1743,7 @@
 
         const handleViewCombined = async (id1, id2) => {
           if (!id1 && !id2) return;
-          const key = `combined-${id1}-${id2}`;
+          const key = `combined-${id1 || ''}-${id2 || ''}`;
           if (viewingId === key) return;
           setViewingId(key);
           
@@ -1697,44 +1767,6 @@
           } finally {
              setViewingId(null);
           }
-        };
-
-        // --- NEW: Calls Server-Side Combined Email (Crash Fix) ---
-        const handleSendCombinedEmail = async (row) => {
-            if (!row.email) { addToast("No email found for trainee.", 'error'); return; }
-            if (sendingRow) return;
-            
-            setSendingRow(row.traineeId);
-            try {
-               const id1 = row.first?.id;
-               const id2 = row.second?.id;
-               // Call new server function
-               const res = await server.sendCombinedEmail(id1, id2, row.email, user.email, row.traineeName);
-               if (res.success) {
-                   addToast(`Email successfully sent to ${row.traineeName} (CC: ${user.email})`, 'success');
-               } else {
-                   addToast("Failed: " + res.message, 'error');
-               }
-            } catch(e) {
-               addToast("Failed to send email: " + e.message, 'error');
-            } finally {
-               setSendingRow(null);
-            }
-        };
-
-        // --- NEW: Calls Server-Side Single Email (Crash Fix) ---
-        const handleSendSingleEmail = async (row) => {
-            if (!row.email) { addToast("No email found.", 'error'); return; }
-            setSendingRow(row.id);
-            try {
-               const res = await server.sendEmail(row.email, user.email, row.traineeName, row.evaluationType, row.id);
-               if (res.success) {
-                   addToast("Email sent!", 'success');
-               } else {
-                   addToast("Failed: " + res.message, 'error');
-               }
-            } catch(e) { addToast(e.message, 'error'); }
-            finally { setSendingRow(null); }
         };
 
         const openRequestModal = (responseId, evalType) => {
@@ -1811,7 +1843,7 @@
            if (!stats || !stats.list) return [];
            return stats.list.filter(item => {
              if (portal === 'DASHBOARD') {
-                 if (String(item.trainerName).trim() === String(user.name).trim()) return false;
+                 if (String(item.trainerName).trim() !== String(user.name).trim()) return false;
              }
              if (portal === 'ADMIN' && selectedTrainers.length > 0) {
                  if (!selectedTrainers.includes(item.trainerName)) return false;
@@ -2106,7 +2138,7 @@
                            </tr>
                          ))}
                          {(!stats.trainerOverview || stats.trainerOverview.length === 0) && (
-                            <tr><td colSpan="7" className="p-4 text-center text-gray-400">No trainer data available</td></tr>
+                            <tr><td colSpan="7" className="p-4 text-center text-gray-400">{t('noTrainerData')}</td></tr>
                          )}
                       </tbody>
                    </table>
@@ -2147,7 +2179,7 @@
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                ) : <div className="h-48 flex items-center justify-center text-gray-400">Charts Loading...</div>}
+                ) : <div className="h-48 flex items-center justify-center text-gray-400">{t('chartsLoading')}</div>}
                 <div className="border-t pt-4">
                   <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">{t('countBreakdown')}</h4>
                   <div className="grid grid-cols-2 gap-2 text-sm">
@@ -2174,7 +2206,7 @@
                             <Tooltip />
                           </RadarChart>
                         </ResponsiveContainer>
-                      ) : <div className="h-full flex items-center justify-center text-gray-400">Charts Loading...</div>}
+                      ) : <div className="h-full flex items-center justify-center text-gray-400">{t('chartsLoading')}</div>}
                    </div>
                    <div className="w-full md:w-1/3">
                       <table className="w-full text-sm">
@@ -2262,14 +2294,13 @@
                       <th className="px-4 py-3 w-1/6">{t('firstHalf')}</th>
                       <th className="px-4 py-3 w-1/6">{t('secondHalf')}</th>
                       <th className="px-4 py-3 w-1/6">{t('overallRating')}</th>
-                      <th className="px-4 py-3 w-16">Email</th>
                       <th className="px-4 py-3 w-16">{t('requests')}</th>
                       <th className="px-4 py-3 w-1/6">{t('comments')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
                     {groupedList.length === 0 ? (
-                      <tr><td colSpan="11" className="px-4 py-8 text-center text-gray-500">{t('noData')}</td></tr>
+                      <tr><td colSpan="10" className="px-4 py-8 text-center text-gray-500">{t('noData')}</td></tr>
                     ) : (
                       groupedList.map((r, i) => {
                          const s1 = r.first ? getGradeValue(r.first.overallGrade) : 0;
@@ -2282,6 +2313,9 @@
                          const reqSecond = r.second ? requests.find(req => req.responseId === r.second.id && req.status === 'Pending') : null;
                          
                          const rowRequestsCount = (reqFirst ? 1 : 0) + (reqSecond ? 1 : 0);
+
+                         // Create robust key for this row's combined report button
+                         const combinedKey = `combined-${r.first?.id || ''}-${r.second?.id || ''}`;
 
                          return (
                             <tr key={i} className="hover:bg-zinc-50 transition-colors">
@@ -2382,33 +2416,19 @@
                                         <button 
                                           type="button"
                                           onClick={() => handleViewCombined(r.first?.id, r.second?.id)} 
-                                          className={`print:hidden p-1.5 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors ${viewingId === `combined-${r.first?.id}-${r.second?.id}` ? 'opacity-50' : ''}`}
-                                          disabled={!!viewingId}
+                                          className={`print:hidden p-1.5 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors ${viewingId === combinedKey ? 'opacity-50' : ''}`}
+                                          disabled={viewingId === combinedKey}
                                           title="View Combined Report"
                                         >
-                                          {viewingId === `combined-${r.first?.id}-${r.second?.id}` 
+                                          {viewingId === combinedKey
                                             ? <div className="loader loader-primary w-3 h-3 border-2"></div> 
-                                            : <Icon name="file-text" size={16} />
+                                            : <span><Icon name="file-text" size={16} /></span>
                                           }
                                         </button>
                                      )}
                                  </div>
                               </td>
 
-                              <td className="px-4 py-3 text-center">
-                                 {r.email ? (
-                                    <button 
-                                       type="button"
-                                       onClick={() => handleSendCombinedEmail(r)} 
-                                       disabled={!!sendingRow}
-                                       className={`p-1.5 rounded text-white transition-colors ${sendingRow === r.traineeId ? 'bg-gray-400' : 'bg-emerald-500 hover:bg-emerald-600'}`}
-                                       title="Send Overall Rating to Employee"
-                                    >
-                                       {sendingRow === r.traineeId ? <div className="loader w-3 h-3"></div> : <Icon name="mail" size={14} />}
-                                    </button>
-                                 ) : <span className="text-slate-300 text-xs">No Email</span>}
-                              </td>
-                              
                               <td className="px-4 py-3 text-center">
                                 {rowRequestsCount > 0 ? (
                                    <span className="bg-orange-100 text-orange-700 font-bold px-2 py-1 rounded-full text-xs">{rowRequestsCount}</span>
@@ -2431,7 +2451,6 @@
         );
       };
 
-      // --- Main ---
       const App = () => {
         const [page, setPage] = useState('LANDING'); 
         const [portal, setPortal] = useState(null);
