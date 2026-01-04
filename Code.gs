@@ -1236,7 +1236,20 @@ function apiGetDashboardStats() {
   const rSheet = ss.getSheetByName("Responses");
   const reqSheet = ss.getSheetByName("Requests"); 
   const ftSheet = ss.getSheetByName("FT Database");
+  const usersSheet = ss.getSheetByName("Users"); // Added to fetch images
+
   const ftData = ftSheet.getDataRange().getValues();
+  const userData = usersSheet.getDataRange().getValues();
+  
+  // Create Map: User Name -> Image URL
+  const userImages = {};
+  if (userData.length > 1) {
+     for(let i=1; i<userData.length; i++) {
+        const uName = safeString(userData[i][1]); // Name column
+        const uImg = safeString(userData[i][6]);  // Image Link column
+        if(uName) userImages[uName] = uImg;
+     }
+  }
   
   const trainerTMs = {};
   if (ftData.length > 1) {
@@ -1412,7 +1425,8 @@ function apiGetDashboardStats() {
         totalDays: data.days.size,
         totalEmployees: data.employees.size,
         totalTL: data.uniqueTLs.size,
-        totalRequests: trainerRequests[name] || 0
+        totalRequests: trainerRequests[name] || 0,
+        image: userImages[name] || "" // Added Image from Users sheet
      };
   });
   

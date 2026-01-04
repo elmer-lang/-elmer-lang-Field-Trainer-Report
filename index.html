@@ -201,7 +201,6 @@
           loading: "Loading Portal...",
           connecting: "Connecting to database...",
           portalTitle: "Field Training Portal",
-          companyName: "New Bon Cafe' Co. Ltd.",
           selectModule: "Select a module to continue",
           evalPortal: "Evaluation Portal",
           evalDesc: "Submit 1st & 2nd Half Evaluations",
@@ -470,9 +469,9 @@
           dateLabel: "التاريخ: ",
           chartsLoading: "جاري تحميل الرسوم البيانية...",
           noTrainerData: "لا توجد بيانات للمدرب",
-          driveStatus: "حالة جوجل درايف:",
-          clickSelectImage: "اضغط لاختيار صورة",
-          noOptionsFound: "لا توجد خيارات"
+          driveStatus: "Google Drive Status:",
+          clickSelectImage: "Click to select image",
+          noOptionsFound: "No options found"
         }
       };
 
@@ -2116,6 +2115,7 @@
                    <table className="w-full text-sm text-left">
                       <thead className="bg-zinc-50 text-slate-600 sticky top-0 font-bold text-xs uppercase">
                          <tr>
+                            <th className="p-3 w-14"></th>
                             <th className="p-3 text-left">{t('trainerName')}</th>
                             <th className="p-3 text-center">{t('colTotalTM')}</th>
                             <th className="p-3 text-center">{t('colTotalEval')}</th>
@@ -2128,6 +2128,18 @@
                       <tbody className="divide-y divide-zinc-100">
                          {stats.trainerOverview && stats.trainerOverview.map((row, i) => (
                            <tr key={i} className="hover:bg-zinc-50 transition-colors">
+                              <td className="p-3">
+                                 <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-200 border border-zinc-300">
+                                    <img 
+                                      src={row.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=random`} 
+                                      alt={row.name} 
+                                      className="w-full h-full object-cover" 
+                                      onError={(e) => {
+                                        e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=random`;
+                                      }}
+                                    />
+                                 </div>
+                              </td>
                               <td className="p-3 font-medium text-slate-800">{row.name}</td>
                               <td className="p-3 text-center font-mono text-slate-500">{row.totalTM}</td>
                               <td className="p-3 text-center font-bold text-orange-600">{row.totalEvaluations}</td>
@@ -2138,7 +2150,7 @@
                            </tr>
                          ))}
                          {(!stats.trainerOverview || stats.trainerOverview.length === 0) && (
-                            <tr><td colSpan="7" className="p-4 text-center text-gray-400">{t('noTrainerData')}</td></tr>
+                            <tr><td colSpan="8" className="p-4 text-center text-gray-400">{t('noTrainerData')}</td></tr>
                          )}
                       </tbody>
                    </table>
@@ -2456,15 +2468,68 @@
         const [portal, setPortal] = useState(null);
         const [user, setUser] = useState(null);
         const [lang, setLang] = useState('en'); 
+        const userRef = useRef(user);
 
-        const goLogin = (p) => { setPortal(p); setPage('LOGIN'); };
-        const goApp = (u) => { setUser(u); setPage('APP'); };
+        // Keep user ref synced for event listener
+        useEffect(() => { userRef.current = user; }, [user]);
+
+        useEffect(() => {
+           // Initialize history state
+           if (!window.history.state) {
+              window.history.replaceState({ page: 'LANDING', portal: null }, '');
+           }
+
+           const handlePopState = (e) => {
+              const s = e.state;
+              if (s) {
+                 // Logic to handle back button from APP state
+                 if (s.page === 'APP' && !userRef.current) {
+                    // If we go back to APP but have no user (e.g. after logout or deep refresh if persistence existed), 
+                    // redirect to Login/Landing.
+                    window.history.replaceState({ page: 'LANDING', portal: null }, '');
+                    setPage('LANDING');
+                    setPortal(null);
+                 } else {
+                    setPage(s.page || 'LANDING');
+                    setPortal(s.portal || null);
+                    // Clear user if leaving APP view to ensure security/consistency
+                    if (s.page !== 'APP') setUser(null); 
+                 }
+              } else {
+                 setPage('LANDING');
+                 setPortal(null);
+                 setUser(null);
+              }
+           };
+
+           window.addEventListener('popstate', handlePopState);
+           return () => window.removeEventListener('popstate', handlePopState);
+        }, []);
+
+        const navTo = (pg, prtl = null, usr = null) => {
+           window.history.pushState({ page: pg, portal: prtl }, '');
+           setPage(pg);
+           setPortal(prtl);
+           if (pg === 'APP' && usr) setUser(usr);
+        };
+
+        const goLogin = (p) => navTo('LOGIN', p);
+        
+        const goRegister = () => navTo('REGISTER', portal);
+
+        const goApp = (u) => navTo('APP', portal, u);
         
         const doLogout = async () => {
           await server.logout(user);
           setUser(null);
           setPortal(null);
+          // Push landing state
+          window.history.pushState({ page: 'LANDING', portal: null }, '');
           setPage('LANDING');
+        };
+        
+        const goBack = () => {
+           window.history.back();
         };
 
         const t = (key) => translations[lang][key] || key;
@@ -2472,8 +2537,8 @@
 
         let content;
         if(page === 'LANDING') content = <Landing onSelect={goLogin} />;
-        else if(page === 'REGISTER') content = <Register onBack={() => setPage('LOGIN')} />;
-        else if(page === 'LOGIN') content = <Login portal={portal} onLogin={goApp} onBack={() => setPage('LANDING')} onRegister={() => setPage('REGISTER')} />;
+        else if(page === 'REGISTER') content = <Register onBack={goBack} />;
+        else if(page === 'LOGIN') content = <Login portal={portal} onLogin={goApp} onBack={goBack} onRegister={goRegister} />;
         else if(page === 'APP') content = portal === 'EVALUATION' ? <EvaluationForm user={user} onLogout={doLogout} /> : <Dashboard user={user} onLogout={doLogout} portal={portal} onUpdateUser={(u) => setUser({...user, ...u})} />;
 
         return (
